@@ -32,7 +32,7 @@ private:
     wxListView* listUpgrades   = nullptr;
     wxListView* listSearch     = nullptr;
     wxTextCtrl* searchBox      = nullptr;
-    wxTextCtrl* descriptionBox = nullptr;
+    wxTextCtrl* descBox[3]     = { nullptr, nullptr, nullptr };  // one per tab
     wxTextCtrl* journal        = nullptr;
 
     // Parsed tables backing each list (row index == list row index).
@@ -49,8 +49,9 @@ private:
     // row. Separate runner: never blocks real actions.
     WingetRunner showRunner;
     wxTimer      descTimer;
-    wxString     descPendingId;   // selection waiting for its description
-    wxString     descShownId;     // id whose description is displayed
+    wxString     descPendingId;      // selection waiting for its description
+    int          descPendingPage = -1;
+    wxString     descShownId[3];     // id displayed per tab
     void fetchDescription();
 
     // --- helpers -------------------------------------------------------------

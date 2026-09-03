@@ -140,7 +140,7 @@ MainWindow::MainWindow()
     // each list a static label carrying the tab name is what makes NVDA say
     // the tab on Ctrl+1/2/3, read before the focused row.
     auto makeListPage = [this](const wxString& title, const wxString& listLabel,
-                               wxListView*& listOut,
+                               wxListView*& listOut, int pageIndex,
                                wxWindow* extraTop = nullptr, wxPanel* page = nullptr)
     {
         if (page == nullptr)
@@ -153,13 +153,23 @@ MainWindow::MainWindow()
         listOut = new wxListView(page, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                                  wxLC_REPORT | wxLC_SINGLE_SEL);
         sizer->Add(listOut, 1, wxEXPAND | wxALL, 6);
+
+        // Description of the selected row, next in the tab order after the
+        // list; filled asynchronously via `winget show`.
+        sizer->Add(new wxStaticText(page, wxID_ANY, "Description :"), 0,
+                   wxLEFT | wxRIGHT, 6);
+        descBox[pageIndex] = new wxTextCtrl(page, wxID_ANY, wxEmptyString,
+                                            wxDefaultPosition, wxSize(-1, 110),
+                                            wxTE_MULTILINE | wxTE_READONLY);
+        sizer->Add(descBox[pageIndex], 0, wxEXPAND | wxALL, 6);
+
         page->SetSizer(sizer);
         notebook->AddPage(page, title);
         return page;
     };
 
-    makeListPage(L"Installés", L"Installés", listInstalled);
-    makeListPage(L"Mises à jour", L"Mises à jour", listUpgrades);
+    makeListPage(L"Installés", L"Installés", listInstalled, 0);
+    makeListPage(L"Mises à jour", L"Mises à jour", listUpgrades, 1);
 
     // Search page: field + button above the list.
     {
@@ -174,17 +184,7 @@ MainWindow::MainWindow()
         topSizer->Add(searchBox, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
         topSizer->Add(goBtn, 0, wxALIGN_CENTER_VERTICAL);
         top->SetSizer(topSizer);
-        makeListPage("Recherche", L"Résultats", listSearch, top, page);
-
-        // Description of the selected result, next in the tab order after the
-        // list; filled asynchronously via `winget show`.
-        auto* pageSizer = page->GetSizer();
-        pageSizer->Add(new wxStaticText(page, wxID_ANY, "Description :"), 0,
-                       wxLEFT | wxRIGHT, 6);
-        descriptionBox = new wxTextCtrl(page, wxID_ANY, wxEmptyString,
-                                        wxDefaultPosition, wxSize(-1, 110),
-                                        wxTE_MULTILINE | wxTE_READONLY);
-        pageSizer->Add(descriptionBox, 0, wxEXPAND | wxALL, 6);
+        makeListPage("Recherche", L"Résultats", listSearch, 2, top, page);
     }
 
     journal = new wxTextCtrl(root, wxID_ANY, wxEmptyString, wxDefaultPosition,
@@ -255,21 +255,31 @@ MainWindow::MainWindow()
 
     Bind(wxEVT_LIST_ITEM_ACTIVATED, &MainWindow::onItemActivated, this);
 
-    // Selecting a search result schedules its description fetch (debounced so
-    // arrowing through the list does not spawn one winget per row).
-    listSearch->Bind(wxEVT_LIST_ITEM_SELECTED, [this](wxListEvent& e)
+    // Selecting a row schedules its description fetch (debounced so arrowing
+    // through a list does not spawn one winget per row).
+    auto bindDescription = [this](wxListView* list, const wingetparser::Table* table,
+                                  int pageIndex)
     {
-        const long row = e.GetIndex();
-        const int idCol = tableSearch.columnIndex("ID");
-        if (idCol < 0 || row < 0 || row >= static_cast<long>(tableSearch.rows.size()))
-            return;
-        const wxString id = tableSearch.rows[row][idCol];
-        if (id == descShownId || id == descPendingId)
-            return;
-        descPendingId = id;
-        descriptionBox->SetValue(L"Chargement de la description…");
-        descTimer.Start(400, wxTIMER_ONE_SHOT);
-    });
+        list->Bind(wxEVT_LIST_ITEM_SELECTED, [this, table, pageIndex](wxListEvent& e)
+        {
+            const long row = e.GetIndex();
+            const int idCol = table->columnIndex("ID");
+            if (idCol < 0 || row < 0 || row >= static_cast<long>(table->rows.size())
+                || static_cast<size_t>(idCol) >= table->rows[row].size())
+                return;
+            const wxString id = table->rows[row][idCol];
+            if (id == descShownId[pageIndex]
+                || (id == descPendingId && pageIndex == descPendingPage))
+                return;
+            descPendingId = id;
+            descPendingPage = pageIndex;
+            descBox[pageIndex]->SetValue(L"Chargement de la description…");
+            descTimer.Start(400, wxTIMER_ONE_SHOT);
+        });
+    };
+    bindDescription(listInstalled, &tableInstalled, 0);
+    bindDescription(listUpgrades, &tableUpgrades, 1);
+    bindDescription(listSearch, &tableSearch, 2);
     descTimer.SetOwner(this);
     Bind(wxEVT_TIMER, [this](wxTimerEvent&) { fetchDescription(); });
 
@@ -516,7 +526,7 @@ void MainWindow::runSearch()
 
 void MainWindow::fetchDescription()
 {
-    if (descPendingId.empty())
+    if (descPendingId.empty() || descPendingPage < 0)
         return;
     if (showRunner.isBusy())
     {
@@ -524,21 +534,23 @@ void MainWindow::fetchDescription()
         return;
     }
     const wxString id = descPendingId;
+    const int page = descPendingPage;
 
     const bool started = showRunner.start(
         { "show", "--id", id, "--exact",
           "--disable-interactivity", "--accept-source-agreements" },
         nullptr,
-        [this, id](int exitCode, const wxString& output)
+        [this, id, page](int exitCode, const wxString& output)
         {
             // The selection may have moved on while winget ran.
-            if (id != descPendingId)
+            if (id != descPendingId || page != descPendingPage)
             {
                 descTimer.Start(1, wxTIMER_ONE_SHOT);
                 return;
             }
             descPendingId.clear();
-            descShownId = id;
+            descPendingPage = -1;
+            descShownId[page] = id;
 
             // `winget show` prints localized "Field : value" lines; keep the
             // few that matter for a spoken summary.
@@ -563,10 +575,10 @@ void MainWindow::fetchDescription()
                 text = exitCode == 0 ? wxString(L"Aucune description disponible.")
                                      : wxString::Format(L"Description indisponible (code %d).", exitCode);
 
-            descriptionBox->SetValue(text);
+            descBox[page]->SetValue(text);
             // If the user already tabbed onto the field while it said
             // "loading", speak the real content now.
-            if (FindFocus() == descriptionBox)
+            if (FindFocus() == descBox[page])
                 announce(text);
         });
     if (!started)
