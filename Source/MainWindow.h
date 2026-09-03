@@ -45,7 +45,7 @@ private:
     // --- helpers -------------------------------------------------------------
     wxListView* currentList() const;
     const wingetparser::Table* currentTable() const;
-    wxString selectedId(wxString* nameOut = nullptr) const;
+    wxString selectedId(wxString* nameOut = nullptr, wxString* versionOut = nullptr) const;
 
     void log(const wxString& line);
     void fillList(wxListView* list, const wingetparser::Table& table);

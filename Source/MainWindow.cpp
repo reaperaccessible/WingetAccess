@@ -318,7 +318,7 @@ const wingetparser::Table* MainWindow::currentTable() const
     }
 }
 
-wxString MainWindow::selectedId(wxString* nameOut) const
+wxString MainWindow::selectedId(wxString* nameOut, wxString* versionOut) const
 {
     wxListView* list = currentList();
     const wingetparser::Table* table = currentTable();
@@ -336,6 +336,14 @@ wxString MainWindow::selectedId(wxString* nameOut) const
 
     if (nameOut != nullptr && !table->rows[row].empty())
         *nameOut = table->rows[row][0];
+
+    if (versionOut != nullptr)
+    {
+        const int verCol = table->columnIndex("Version");
+        if (verCol >= 0 && static_cast<size_t>(verCol) < table->rows[row].size())
+            *versionOut = table->rows[row][verCol];
+    }
+
     return table->rows[row][idCol];
 }
 
@@ -583,8 +591,8 @@ void MainWindow::onUninstallSelected()
         announce(L"Désinstallation impossible depuis la recherche");
         return;
     }
-    wxString name;
-    const wxString id = selectedId(&name);
+    wxString name, version;
+    const wxString id = selectedId(&name, &version);
     if (id.empty())
     {
         announce(L"Aucune sélection");
@@ -595,9 +603,20 @@ void MainWindow::onUninstallSelected()
         L"Désinstaller", wxYES_NO | wxICON_QUESTION, this);
     if (reply != wxYES)
         return;
-    runAction({ "uninstall", "--id", id, "--exact", "--silent",
-                "--accept-source-agreements", "--disable-interactivity" },
-              wxString::Format(L"Désinstallation de %s…", name));
+
+    // Same winget ID can cover several installed entries (e.g. AIDA64 7.70 and
+    // 8.35 both map to FinalWire.AIDA64.Extreme); without the version winget
+    // answers "multiple packages found" and does nothing. Target the exact
+    // version of the selected row when it is usable.
+    std::vector<wxString> args = { "uninstall", "--id", id, "--exact", "--silent",
+                                   "--accept-source-agreements", "--disable-interactivity" };
+    if (!version.empty() && version.CmpNoCase("Unknown") != 0
+        && version.CmpNoCase("Inconnu") != 0)
+    {
+        args.push_back("--version");
+        args.push_back(version);
+    }
+    runAction(args, wxString::Format(L"Désinstallation de %s %s…", name, version));
 }
 
 void MainWindow::onCopyId()
