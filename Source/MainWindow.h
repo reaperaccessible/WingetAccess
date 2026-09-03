@@ -13,8 +13,18 @@ class MainWindow : public wxFrame
 {
 public:
     MainWindow();
+    ~MainWindow() override;
+
+protected:
+    WXLRESULT MSWWindowProc(WXUINT nMsg, WXWPARAM wParam, WXLPARAM lParam) override;
 
 private:
+    // Screen-reader announcement of a dynamic message. Raised on our own UIA
+    // provider: a raw wx window is MSAA-only and NVDA silently ignores
+    // UiaRaiseNotificationEvent from a bare host provider (Manager 1.30 trap).
+    void announce(const wxString& text);
+    void* uiaProvider_ = nullptr;
+
     // --- UI ------------------------------------------------------------------
     wxNotebook* notebook       = nullptr;
     wxListView* listInstalled  = nullptr;

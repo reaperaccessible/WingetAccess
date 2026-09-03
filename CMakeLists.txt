@@ -20,7 +20,6 @@ add_executable(WingetAccess WIN32
     Source/MainWindow.cpp
     Source/WingetRunner.cpp
     Source/WingetParser.cpp
-    Source/Announce.cpp
     Source/WingetAccess.rc     # manifest (asInvoker/DPI) + version info
 )
 

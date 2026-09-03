@@ -1,5 +1,4 @@
 #include "MainWindow.h"
-#include "Announce.h"
 #include "Version.h"
 
 #include <wx/menu.h>
@@ -11,8 +10,70 @@
 
 #include <functional>
 
+#define NOMINMAX
+#include <windows.h>
+#include <uiautomation.h>   // IRawElementProviderSimple, UiaRaiseNotificationEvent
+#include <oleauto.h>        // SysAllocString / SysFreeString
+
 namespace
 {
+// Minimal UIA provider for the main-window HWND. Its only job is to exist so
+// the window is a real UIA provider (returned from WM_GETOBJECT), which lets
+// NVDA/JAWS receive the notification events we raise. Content is still read
+// through the MSAA bridge via the host provider. A bare wx window is MSAA-only
+// and NVDA silently drops notifications raised on a plain host provider.
+class FrameUiaProvider : public IRawElementProviderSimple
+{
+public:
+    explicit FrameUiaProvider(HWND hwnd) : hwnd_(hwnd) {}
+
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&ref_); }
+    ULONG STDMETHODCALLTYPE Release() override
+    {
+        const LONG r = InterlockedDecrement(&ref_);
+        if (r == 0) delete this;
+        return r;
+    }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override
+    {
+        if (ppv == nullptr) return E_INVALIDARG;
+        if (riid == __uuidof(IUnknown) || riid == __uuidof(IRawElementProviderSimple))
+        {
+            *ppv = static_cast<IRawElementProviderSimple*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    HRESULT STDMETHODCALLTYPE get_ProviderOptions(ProviderOptions* p) override
+    {
+        *p = static_cast<ProviderOptions>(ProviderOptions_ServerSideProvider
+                                        | ProviderOptions_UseComThreading);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetPatternProvider(PATTERNID, IUnknown** p) override
+    {
+        *p = nullptr;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetPropertyValue(PROPERTYID id, VARIANT* p) override
+    {
+        p->vt = VT_EMPTY;
+        if (id == UIA_ControlTypePropertyId) { p->vt = VT_I4; p->lVal = UIA_PaneControlTypeId; }
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_HostRawElementProvider(IRawElementProviderSimple** p) override
+    {
+        return UiaHostProviderFromHwnd(hwnd_, p);
+    }
+
+private:
+    LONG ref_ = 1;
+    HWND hwnd_;
+};
+
 enum Ids
 {
     ID_REFRESH = wxID_HIGHEST + 1,
@@ -36,6 +97,10 @@ MainWindow::MainWindow()
               wxString::Format("WingetAccess %s", WINGETACCESS_VERSION_STR),
               wxDefaultPosition, wxSize(1000, 700))
 {
+    // The frame's HWND exists now (base ctor created it); attach our UIA
+    // provider so NVDA receives the notifications we raise (announce()).
+    uiaProvider_ = new FrameUiaProvider(reinterpret_cast<HWND>(GetHandle()));
+
     // --- menu bar ------------------------------------------------------------
     auto* menuActions = new wxMenu();
     menuActions->Append(ID_UPGRADE_SELECTED, L"Mettre à jour la sélection\tCtrl+U");
@@ -188,6 +253,46 @@ MainWindow::MainWindow()
     refreshInstalled();
 }
 
+MainWindow::~MainWindow()
+{
+    runner.terminate();
+    if (uiaProvider_ != nullptr)
+    {
+        static_cast<IRawElementProviderSimple*>(uiaProvider_)->Release();
+        uiaProvider_ = nullptr;
+    }
+}
+
+WXLRESULT MainWindow::MSWWindowProc(WXUINT nMsg, WXWPARAM wParam, WXLPARAM lParam)
+{
+    // Answer WM_GETOBJECT for the UIA root so NVDA connects via UIA and receives
+    // our notifications; everything else falls through to wx (which still
+    // answers OBJID_CLIENT with its MSAA implementation for the controls).
+    if (nMsg == WM_GETOBJECT && uiaProvider_ != nullptr
+        && static_cast<long>(lParam) == static_cast<long>(UiaRootObjectId))
+    {
+        return UiaReturnRawElementProvider(
+            reinterpret_cast<HWND>(GetHandle()), wParam, lParam,
+            static_cast<IRawElementProviderSimple*>(uiaProvider_));
+    }
+    return wxFrame::MSWWindowProc(nMsg, wParam, lParam);
+}
+
+void MainWindow::announce(const wxString& text)
+{
+    if (text.empty() || uiaProvider_ == nullptr)
+        return;
+    BSTR msg = SysAllocString(text.wc_str());
+    if (msg != nullptr)
+    {
+        UiaRaiseNotificationEvent(static_cast<IRawElementProviderSimple*>(uiaProvider_),
+                                  NotificationKind_Other,
+                                  NotificationProcessing_All,
+                                  msg, /*activityId=*/nullptr);
+        SysFreeString(msg);
+    }
+}
+
 // --- helpers -----------------------------------------------------------------
 
 wxListView* MainWindow::currentList() const
@@ -291,10 +396,10 @@ void MainWindow::refreshInstalled()
                 refreshUpgrades();
             }
             else
-                a11y::announce(wxString::Format(L"%zu paquets installés", tableInstalled.rows.size()));
+                announce(wxString::Format(L"%zu paquets installés", tableInstalled.rows.size()));
         });
     if (!started)
-        a11y::announce(kBusyMsg);
+        announce(kBusyMsg);
 }
 
 void MainWindow::refreshUpgrades()
@@ -310,10 +415,10 @@ void MainWindow::refreshUpgrades()
                 log(wxString::Format(L"winget upgrade a échoué (code %d).", exitCode));
             else
                 log(wxString::Format(L"%zu mises à jour disponibles.", tableUpgrades.rows.size()));
-            a11y::announce(wxString::Format(L"%zu mises à jour", tableUpgrades.rows.size()));
+            announce(wxString::Format(L"%zu mises à jour", tableUpgrades.rows.size()));
         });
     if (!started)
-        a11y::announce(kBusyMsg);
+        announce(kBusyMsg);
 }
 
 void MainWindow::runSearch()
@@ -321,7 +426,7 @@ void MainWindow::runSearch()
     wxString terms = searchBox->GetValue().Strip(wxString::both);
     if (terms.empty())
     {
-        a11y::announce("Termes de recherche vides");
+        announce("Termes de recherche vides");
         return;
     }
 
@@ -336,22 +441,22 @@ void MainWindow::runSearch()
             {
                 log(exitCode == 0 ? wxString(L"Recherche : aucun résultat.")
                                   : wxString::Format(L"Recherche : aucun résultat (code %d).", exitCode));
-                a11y::announce(L"Aucun résultat");
+                announce(L"Aucun résultat");
             }
             else
             {
                 log(wxString::Format(L"Recherche : %zu résultats.", tableSearch.rows.size()));
-                a11y::announce(wxString::Format(L"%zu résultats", tableSearch.rows.size()));
+                announce(wxString::Format(L"%zu résultats", tableSearch.rows.size()));
                 listSearch->SetFocus();
             }
         });
     if (started)
     {
         log(wxString::Format(L"Recherche de « %s »…", terms));
-        a11y::announce(L"Recherche…");
+        announce(L"Recherche…");
     }
     else
-        a11y::announce(kBusyMsg);
+        announce(kBusyMsg);
 }
 
 // --- actions -----------------------------------------------------------------
@@ -367,13 +472,13 @@ void MainWindow::runAction(const std::vector<wxString>& args, const wxString& an
             if (exitCode == 0)
             {
                 log(L"Terminé.");
-                a11y::announce(L"Terminé");
+                announce(L"Terminé");
             }
             else
             {
                 log(wxString::Format(L"Échec, code %d (0x%08X).", exitCode,
                                      static_cast<unsigned int>(exitCode)));
-                a11y::announce(wxString::Format(L"Échec, code %d", exitCode));
+                announce(wxString::Format(L"Échec, code %d", exitCode));
             }
             // Refresh both stateful lists after any action.
             refreshUpgradesAfterInstalled = true;
@@ -384,17 +489,17 @@ void MainWindow::runAction(const std::vector<wxString>& args, const wxString& an
     {
         actionInProgress = true;
         log(announceStart);
-        a11y::announce(announceStart);
+        announce(announceStart);
     }
     else
-        a11y::announce(kBusyMsg);
+        announce(kBusyMsg);
 }
 
 void MainWindow::onRefresh()
 {
     if (runner.isBusy())
     {
-        a11y::announce(kBusyMsg);
+        announce(kBusyMsg);
         return;
     }
     switch (notebook->GetSelection())
@@ -411,7 +516,7 @@ void MainWindow::onUpgradeSelected()
     const wxString id = selectedId(&name);
     if (id.empty())
     {
-        a11y::announce(L"Aucune sélection");
+        announce(L"Aucune sélection");
         return;
     }
     runAction({ "upgrade", "--id", id, "--exact", "--silent",
@@ -424,7 +529,7 @@ void MainWindow::onUpgradeAll()
 {
     if (runner.isBusy())
     {
-        a11y::announce(kBusyMsg);
+        announce(kBusyMsg);
         return;
     }
     const int reply = wxMessageBox(
@@ -444,7 +549,7 @@ void MainWindow::onInstallSelected()
     const wxString id = selectedId(&name);
     if (id.empty())
     {
-        a11y::announce(L"Aucune sélection");
+        announce(L"Aucune sélection");
         return;
     }
     runAction({ "install", "--id", id, "--exact", "--silent",
@@ -457,14 +562,14 @@ void MainWindow::onUninstallSelected()
 {
     if (notebook->GetSelection() == 2)
     {
-        a11y::announce(L"Désinstallation impossible depuis la recherche");
+        announce(L"Désinstallation impossible depuis la recherche");
         return;
     }
     wxString name;
     const wxString id = selectedId(&name);
     if (id.empty())
     {
-        a11y::announce(L"Aucune sélection");
+        announce(L"Aucune sélection");
         return;
     }
     const int reply = wxMessageBox(
@@ -482,14 +587,14 @@ void MainWindow::onCopyId()
     const wxString id = selectedId();
     if (id.empty())
     {
-        a11y::announce(L"Aucune sélection");
+        announce(L"Aucune sélection");
         return;
     }
     if (wxTheClipboard->Open())
     {
         wxTheClipboard->SetData(new wxTextDataObject(id));
         wxTheClipboard->Close();
-        a11y::announce(L"Identifiant copié");
+        announce(L"Identifiant copié");
     }
 }
 
