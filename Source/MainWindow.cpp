@@ -122,9 +122,11 @@ MainWindow::MainWindow()
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { Close(); }, wxID_EXIT);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { onHelpKeys(); }, ID_HELP_KEYS);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { onAbout(); }, wxID_ABOUT);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(0); listInstalled->SetFocus(); }, ID_TAB_INSTALLED);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(1); listUpgrades->SetFocus(); }, ID_TAB_UPGRADES);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(2); searchBox->SetFocus(); }, ID_TAB_SEARCH);
+    // Announce the tab name on Ctrl+1/2/3 (the focus lands inside the page, so
+    // NVDA would otherwise only read the focused control, not which tab).
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(0); a11y::announce("Installés"); listInstalled->SetFocus(); }, ID_TAB_INSTALLED);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(1); a11y::announce("Mises à jour"); listUpgrades->SetFocus(); }, ID_TAB_UPGRADES);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(2); a11y::announce("Recherche"); searchBox->SetFocus(); }, ID_TAB_SEARCH);
 
     Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { runSearch(); }, ID_SEARCH_GO);
     searchBox->Bind(wxEVT_TEXT_ENTER, [this](wxCommandEvent&) { runSearch(); });
