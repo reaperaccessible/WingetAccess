@@ -1,0 +1,4 @@
+#pragma once
+
+#define WINGETACCESS_VERSION_STR "1.00"
+#define WINGETACCESS_VERSION_RC  1,0,0,0

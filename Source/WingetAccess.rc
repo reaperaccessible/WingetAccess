@@ -1,0 +1,33 @@
+#include <winres.h>
+#include "Version.h"
+
+// Application manifest (asInvoker, per-monitor DPI, comctl v6).
+1 RT_MANIFEST "WingetAccess.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION WINGETACCESS_VERSION_RC
+ PRODUCTVERSION WINGETACCESS_VERSION_RC
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040c04b0"
+        BEGIN
+            VALUE "CompanyName", "ReaperAccessible"
+            VALUE "FileDescription", "WingetAccess - gestionnaire Winget accessible"
+            VALUE "FileVersion", WINGETACCESS_VERSION_STR
+            VALUE "InternalName", "WingetAccess"
+            VALUE "OriginalFilename", "WingetAccess.exe"
+            VALUE "ProductName", "WingetAccess"
+            VALUE "ProductVersion", WINGETACCESS_VERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x40c, 1200
+    END
+END
