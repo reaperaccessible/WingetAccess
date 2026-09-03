@@ -1,2 +1,9 @@
+# Claude Code
+.claude/
+
+# Build outputs
 build/
 build_log/
+*.exe
+*.obj
+*.lib
