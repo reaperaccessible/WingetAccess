@@ -28,7 +28,7 @@ enum Ids
     ID_SEARCH_GO,
 };
 
-const wxString kBusyMsg = "Occupé, opération en cours";
+const wxString kBusyMsg = L"Occupé, opération en cours";
 } // namespace
 
 MainWindow::MainWindow()
@@ -38,10 +38,10 @@ MainWindow::MainWindow()
 {
     // --- menu bar ------------------------------------------------------------
     auto* menuActions = new wxMenu();
-    menuActions->Append(ID_UPGRADE_SELECTED, "Mettre à jour la sélection\tCtrl+U");
-    menuActions->Append(ID_UPGRADE_ALL, "Tout mettre à jour\tCtrl+Shift+U");
-    menuActions->Append(ID_INSTALL_SELECTED, "Installer la sélection\tCtrl+I");
-    menuActions->Append(ID_UNINSTALL_SELECTED, "Désinstaller la sélection");
+    menuActions->Append(ID_UPGRADE_SELECTED, L"Mettre à jour la sélection\tCtrl+U");
+    menuActions->Append(ID_UPGRADE_ALL, L"Tout mettre à jour\tCtrl+Shift+U");
+    menuActions->Append(ID_INSTALL_SELECTED, L"Installer la sélection\tCtrl+I");
+    menuActions->Append(ID_UNINSTALL_SELECTED, L"Désinstaller la sélection");
     menuActions->AppendSeparator();
     menuActions->Append(ID_COPY_ID, "Copier l'identifiant\tCtrl+Shift+C");
     menuActions->Append(ID_REFRESH, "Actualiser\tF5");
@@ -49,13 +49,13 @@ MainWindow::MainWindow()
     menuActions->Append(wxID_EXIT, "Quitter\tAlt+F4");
 
     auto* menuView = new wxMenu();
-    menuView->Append(ID_TAB_INSTALLED, "Installés\tCtrl+1");
-    menuView->Append(ID_TAB_UPGRADES, "Mises à jour\tCtrl+2");
+    menuView->Append(ID_TAB_INSTALLED, L"Installés\tCtrl+1");
+    menuView->Append(ID_TAB_UPGRADES, L"Mises à jour\tCtrl+2");
     menuView->Append(ID_TAB_SEARCH, "Recherche\tCtrl+3");
 
     auto* menuHelp = new wxMenu();
     menuHelp->Append(ID_HELP_KEYS, "Raccourcis clavier\tCtrl+H");
-    menuHelp->Append(wxID_ABOUT, "À propos");
+    menuHelp->Append(wxID_ABOUT, L"À propos");
 
     auto* bar = new wxMenuBar();
     bar->Append(menuActions, "&Actions");
@@ -91,8 +91,8 @@ MainWindow::MainWindow()
         return page;
     };
 
-    makeListPage("Installés", "Installés", listInstalled);
-    makeListPage("Mises à jour", "Mises à jour", listUpgrades);
+    makeListPage(L"Installés", L"Installés", listInstalled);
+    makeListPage(L"Mises à jour", L"Mises à jour", listUpgrades);
 
     // Search page: field + button above the list.
     {
@@ -107,7 +107,7 @@ MainWindow::MainWindow()
         topSizer->Add(searchBox, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
         topSizer->Add(goBtn, 0, wxALIGN_CENTER_VERTICAL);
         top->SetSizer(topSizer);
-        makeListPage("Recherche", "Résultats", listSearch, top, page);
+        makeListPage("Recherche", L"Résultats", listSearch, top, page);
     }
 
     journal = new wxTextCtrl(root, wxID_ANY, wxEmptyString, wxDefaultPosition,
@@ -182,7 +182,7 @@ MainWindow::MainWindow()
     // focus sits in a list or text control; route them with a CHAR_HOOK.
     Bind(wxEVT_CHAR_HOOK, &MainWindow::onCharHook, this);
 
-    log(wxString::Format("WingetAccess %s. Chargement des paquets installés…",
+    log(wxString::Format(L"WingetAccess %s. Chargement des paquets installés…",
                          WINGETACCESS_VERSION_STR));
     refreshUpgradesAfterInstalled = true;
     refreshInstalled();
@@ -281,9 +281,9 @@ void MainWindow::refreshInstalled()
             tableInstalled = wingetparser::parseFirstTable(output);
             fillList(listInstalled, tableInstalled);
             if (exitCode != 0 && tableInstalled.empty())
-                log(wxString::Format("winget list a échoué (code %d).", exitCode));
+                log(wxString::Format(L"winget list a échoué (code %d).", exitCode));
             else
-                log(wxString::Format("%zu paquets installés.", tableInstalled.rows.size()));
+                log(wxString::Format(L"%zu paquets installés.", tableInstalled.rows.size()));
 
             if (refreshUpgradesAfterInstalled)
             {
@@ -291,7 +291,7 @@ void MainWindow::refreshInstalled()
                 refreshUpgrades();
             }
             else
-                a11y::announce(wxString::Format("%zu paquets installés", tableInstalled.rows.size()));
+                a11y::announce(wxString::Format(L"%zu paquets installés", tableInstalled.rows.size()));
         });
     if (!started)
         a11y::announce(kBusyMsg);
@@ -307,10 +307,10 @@ void MainWindow::refreshUpgrades()
             tableUpgrades = wingetparser::parseFirstTable(output);
             fillList(listUpgrades, tableUpgrades);
             if (exitCode != 0 && tableUpgrades.empty())
-                log(wxString::Format("winget upgrade a échoué (code %d).", exitCode));
+                log(wxString::Format(L"winget upgrade a échoué (code %d).", exitCode));
             else
-                log(wxString::Format("%zu mises à jour disponibles.", tableUpgrades.rows.size()));
-            a11y::announce(wxString::Format("%zu mises à jour", tableUpgrades.rows.size()));
+                log(wxString::Format(L"%zu mises à jour disponibles.", tableUpgrades.rows.size()));
+            a11y::announce(wxString::Format(L"%zu mises à jour", tableUpgrades.rows.size()));
         });
     if (!started)
         a11y::announce(kBusyMsg);
@@ -334,21 +334,21 @@ void MainWindow::runSearch()
             fillList(listSearch, tableSearch);
             if (tableSearch.empty())
             {
-                log(exitCode == 0 ? wxString("Recherche : aucun résultat.")
-                                  : wxString::Format("Recherche : aucun résultat (code %d).", exitCode));
-                a11y::announce("Aucun résultat");
+                log(exitCode == 0 ? wxString(L"Recherche : aucun résultat.")
+                                  : wxString::Format(L"Recherche : aucun résultat (code %d).", exitCode));
+                a11y::announce(L"Aucun résultat");
             }
             else
             {
-                log(wxString::Format("Recherche : %zu résultats.", tableSearch.rows.size()));
-                a11y::announce(wxString::Format("%zu résultats", tableSearch.rows.size()));
+                log(wxString::Format(L"Recherche : %zu résultats.", tableSearch.rows.size()));
+                a11y::announce(wxString::Format(L"%zu résultats", tableSearch.rows.size()));
                 listSearch->SetFocus();
             }
         });
     if (started)
     {
-        log(wxString::Format("Recherche de « %s »…", terms));
-        a11y::announce("Recherche…");
+        log(wxString::Format(L"Recherche de « %s »…", terms));
+        a11y::announce(L"Recherche…");
     }
     else
         a11y::announce(kBusyMsg);
@@ -366,14 +366,14 @@ void MainWindow::runAction(const std::vector<wxString>& args, const wxString& an
             actionInProgress = false;
             if (exitCode == 0)
             {
-                log("Terminé.");
-                a11y::announce("Terminé");
+                log(L"Terminé.");
+                a11y::announce(L"Terminé");
             }
             else
             {
-                log(wxString::Format("Échec, code %d (0x%08X).", exitCode,
+                log(wxString::Format(L"Échec, code %d (0x%08X).", exitCode,
                                      static_cast<unsigned int>(exitCode)));
-                a11y::announce(wxString::Format("Échec, code %d", exitCode));
+                a11y::announce(wxString::Format(L"Échec, code %d", exitCode));
             }
             // Refresh both stateful lists after any action.
             refreshUpgradesAfterInstalled = true;
@@ -399,8 +399,8 @@ void MainWindow::onRefresh()
     }
     switch (notebook->GetSelection())
     {
-        case 0: log("Actualisation des paquets installés…"); refreshInstalled(); break;
-        case 1: log("Actualisation des mises à jour…"); refreshUpgrades(); break;
+        case 0: log(L"Actualisation des paquets installés…"); refreshInstalled(); break;
+        case 1: log(L"Actualisation des mises à jour…"); refreshUpgrades(); break;
         case 2: runSearch(); break;
     }
 }
@@ -411,13 +411,13 @@ void MainWindow::onUpgradeSelected()
     const wxString id = selectedId(&name);
     if (id.empty())
     {
-        a11y::announce("Aucune sélection");
+        a11y::announce(L"Aucune sélection");
         return;
     }
     runAction({ "upgrade", "--id", id, "--exact", "--silent",
                 "--accept-source-agreements", "--accept-package-agreements",
                 "--disable-interactivity" },
-              wxString::Format("Mise à jour de %s…", name));
+              wxString::Format(L"Mise à jour de %s…", name));
 }
 
 void MainWindow::onUpgradeAll()
@@ -428,14 +428,14 @@ void MainWindow::onUpgradeAll()
         return;
     }
     const int reply = wxMessageBox(
-        wxString::Format("Mettre à jour les %zu paquets ?", tableUpgrades.rows.size()),
-        "Tout mettre à jour", wxYES_NO | wxICON_QUESTION, this);
+        wxString::Format(L"Mettre à jour les %zu paquets ?", tableUpgrades.rows.size()),
+        L"Tout mettre à jour", wxYES_NO | wxICON_QUESTION, this);
     if (reply != wxYES)
         return;
     runAction({ "upgrade", "--all", "--silent",
                 "--accept-source-agreements", "--accept-package-agreements",
                 "--disable-interactivity" },
-              "Mise à jour de tous les paquets…");
+              L"Mise à jour de tous les paquets…");
 }
 
 void MainWindow::onInstallSelected()
@@ -444,37 +444,37 @@ void MainWindow::onInstallSelected()
     const wxString id = selectedId(&name);
     if (id.empty())
     {
-        a11y::announce("Aucune sélection");
+        a11y::announce(L"Aucune sélection");
         return;
     }
     runAction({ "install", "--id", id, "--exact", "--silent",
                 "--accept-source-agreements", "--accept-package-agreements",
                 "--disable-interactivity" },
-              wxString::Format("Installation de %s…", name));
+              wxString::Format(L"Installation de %s…", name));
 }
 
 void MainWindow::onUninstallSelected()
 {
     if (notebook->GetSelection() == 2)
     {
-        a11y::announce("Désinstallation impossible depuis la recherche");
+        a11y::announce(L"Désinstallation impossible depuis la recherche");
         return;
     }
     wxString name;
     const wxString id = selectedId(&name);
     if (id.empty())
     {
-        a11y::announce("Aucune sélection");
+        a11y::announce(L"Aucune sélection");
         return;
     }
     const int reply = wxMessageBox(
-        wxString::Format("Désinstaller %s ?", name),
-        "Désinstaller", wxYES_NO | wxICON_QUESTION, this);
+        wxString::Format(L"Désinstaller %s ?", name),
+        L"Désinstaller", wxYES_NO | wxICON_QUESTION, this);
     if (reply != wxYES)
         return;
     runAction({ "uninstall", "--id", id, "--exact", "--silent",
                 "--accept-source-agreements", "--disable-interactivity" },
-              wxString::Format("Désinstallation de %s…", name));
+              wxString::Format(L"Désinstallation de %s…", name));
 }
 
 void MainWindow::onCopyId()
@@ -482,14 +482,14 @@ void MainWindow::onCopyId()
     const wxString id = selectedId();
     if (id.empty())
     {
-        a11y::announce("Aucune sélection");
+        a11y::announce(L"Aucune sélection");
         return;
     }
     if (wxTheClipboard->Open())
     {
         wxTheClipboard->SetData(new wxTextDataObject(id));
         wxTheClipboard->Close();
-        a11y::announce("Identifiant copié");
+        a11y::announce(L"Identifiant copié");
     }
 }
 
@@ -533,17 +533,17 @@ void MainWindow::onItemActivated(wxListEvent& e)
 void MainWindow::onHelpKeys()
 {
     wxMessageBox(
-        "Ctrl+1 : Installés\n"
-        "Ctrl+2 : Mises à jour\n"
+        L"Ctrl+1 : Installés\n"
+        L"Ctrl+2 : Mises à jour\n"
         "Ctrl+3 : Recherche (le focus va au champ)\n"
-        "Entrée dans une liste : mettre à jour (Installés, Mises à jour) ou installer (Recherche)\n"
-        "Ctrl+U : mettre à jour la sélection\n"
-        "Ctrl+Maj+U : tout mettre à jour\n"
-        "Ctrl+I : installer la sélection\n"
-        "Suppr : désinstaller la sélection (avec confirmation)\n"
+        L"Entrée dans une liste : mettre à jour (Installés, Mises à jour) ou installer (Recherche)\n"
+        L"Ctrl+U : mettre à jour la sélection\n"
+        L"Ctrl+Maj+U : tout mettre à jour\n"
+        L"Ctrl+I : installer la sélection\n"
+        L"Suppr : désinstaller la sélection (avec confirmation)\n"
         "Ctrl+Maj+C : copier l'identifiant du paquet\n"
         "F5 : actualiser l'onglet courant\n"
-        "Le journal en bas de la fenêtre garde la sortie complète de winget.",
+        L"Le journal en bas de la fenêtre garde la sortie complète de winget.",
         "Raccourcis clavier", wxOK | wxICON_INFORMATION, this);
 }
 
@@ -554,5 +554,5 @@ void MainWindow::onAbout()
                          "Gestionnaire Winget accessible (NVDA), portable.\n"
                          "Interface wxWidgets, annonces UI Automation natives.",
                          WINGETACCESS_VERSION_STR),
-        "À propos", wxOK | wxICON_INFORMATION, this);
+        L"À propos", wxOK | wxICON_INFORMATION, this);
 }

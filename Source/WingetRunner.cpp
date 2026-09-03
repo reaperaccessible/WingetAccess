@@ -91,7 +91,7 @@ bool WingetRunner::start(const std::vector<wxString>& args,
     {
         busy.store(false);
         if (onLine)
-            onLine("Erreur interne : CreatePipe a échoué.");
+            onLine(L"Erreur interne : CreatePipe a échoué.");
         return false;
     }
     SetHandleInformation(readEnd, HANDLE_FLAG_INHERIT, 0);
@@ -115,7 +115,7 @@ bool WingetRunner::start(const std::vector<wxString>& args,
         CloseHandle(readEnd);
         busy.store(false);
         if (onLine)
-            onLine("Impossible de lancer winget. Vérifie que winget est installé (App Installer).");
+            onLine(L"Impossible de lancer winget. Vérifie que winget est installé (App Installer).");
         return false;
     }
 
