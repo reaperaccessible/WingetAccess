@@ -7,6 +7,7 @@
 #include <wx/msgdlg.h>
 #include <wx/clipbrd.h>
 #include <wx/stattext.h>
+#include <wx/tokenzr.h>
 
 #include <algorithm>
 #include <functional>
@@ -174,6 +175,16 @@ MainWindow::MainWindow()
         topSizer->Add(goBtn, 0, wxALIGN_CENTER_VERTICAL);
         top->SetSizer(topSizer);
         makeListPage("Recherche", L"Résultats", listSearch, top, page);
+
+        // Description of the selected result, next in the tab order after the
+        // list; filled asynchronously via `winget show`.
+        auto* pageSizer = page->GetSizer();
+        pageSizer->Add(new wxStaticText(page, wxID_ANY, "Description :"), 0,
+                       wxLEFT | wxRIGHT, 6);
+        descriptionBox = new wxTextCtrl(page, wxID_ANY, wxEmptyString,
+                                        wxDefaultPosition, wxSize(-1, 110),
+                                        wxTE_MULTILINE | wxTE_READONLY);
+        pageSizer->Add(descriptionBox, 0, wxEXPAND | wxALL, 6);
     }
 
     journal = new wxTextCtrl(root, wxID_ANY, wxEmptyString, wxDefaultPosition,
@@ -243,6 +254,24 @@ MainWindow::MainWindow()
     searchBox->Bind(wxEVT_TEXT_ENTER, [this](wxCommandEvent&) { runSearch(); });
 
     Bind(wxEVT_LIST_ITEM_ACTIVATED, &MainWindow::onItemActivated, this);
+
+    // Selecting a search result schedules its description fetch (debounced so
+    // arrowing through the list does not spawn one winget per row).
+    listSearch->Bind(wxEVT_LIST_ITEM_SELECTED, [this](wxListEvent& e)
+    {
+        const long row = e.GetIndex();
+        const int idCol = tableSearch.columnIndex("ID");
+        if (idCol < 0 || row < 0 || row >= static_cast<long>(tableSearch.rows.size()))
+            return;
+        const wxString id = tableSearch.rows[row][idCol];
+        if (id == descShownId || id == descPendingId)
+            return;
+        descPendingId = id;
+        descriptionBox->SetValue(L"Chargement de la description…");
+        descTimer.Start(400, wxTIMER_ONE_SHOT);
+    });
+    descTimer.SetOwner(this);
+    Bind(wxEVT_TIMER, [this](wxTimerEvent&) { fetchDescription(); });
 
     // Plain keys (Delete) are never delivered through accelerators when the
     // focus sits in a list or text control; route them with a CHAR_HOOK.
@@ -483,6 +512,65 @@ void MainWindow::runSearch()
     }
     else
         announce(kBusyMsg);
+}
+
+void MainWindow::fetchDescription()
+{
+    if (descPendingId.empty())
+        return;
+    if (showRunner.isBusy())
+    {
+        descTimer.Start(400, wxTIMER_ONE_SHOT);   // retry once the current show ends
+        return;
+    }
+    const wxString id = descPendingId;
+
+    const bool started = showRunner.start(
+        { "show", "--id", id, "--exact",
+          "--disable-interactivity", "--accept-source-agreements" },
+        nullptr,
+        [this, id](int exitCode, const wxString& output)
+        {
+            // The selection may have moved on while winget ran.
+            if (id != descPendingId)
+            {
+                descTimer.Start(1, wxTIMER_ONE_SHOT);
+                return;
+            }
+            descPendingId.clear();
+            descShownId = id;
+
+            // `winget show` prints localized "Field : value" lines; keep the
+            // few that matter for a spoken summary.
+            wxString text;
+            const wchar_t* keys[] = { L"Description", L"Auteur", L"Publisher",
+                                      L"Page d", L"Licence", L"Version" };
+            wxStringTokenizer lines(output, "\n");
+            while (lines.HasMoreTokens())
+            {
+                wxString line = lines.GetNextToken();
+                line.Trim(true).Trim(false);
+                for (const wchar_t* key : keys)
+                {
+                    if (line.StartsWith(key) && line.Contains(":"))
+                    {
+                        text += line + "\n";
+                        break;
+                    }
+                }
+            }
+            if (text.empty())
+                text = exitCode == 0 ? wxString(L"Aucune description disponible.")
+                                     : wxString::Format(L"Description indisponible (code %d).", exitCode);
+
+            descriptionBox->SetValue(text);
+            // If the user already tabbed onto the field while it said
+            // "loading", speak the real content now.
+            if (FindFocus() == descriptionBox)
+                announce(text);
+        });
+    if (!started)
+        descTimer.Start(400, wxTIMER_ONE_SHOT);
 }
 
 // --- actions -----------------------------------------------------------------

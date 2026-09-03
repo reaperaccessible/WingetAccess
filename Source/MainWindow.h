@@ -5,6 +5,7 @@
 #include <wx/notebook.h>
 #include <wx/textctrl.h>
 #include <wx/button.h>
+#include <wx/timer.h>
 
 #include "WingetRunner.h"
 #include "WingetParser.h"
@@ -31,6 +32,7 @@ private:
     wxListView* listUpgrades   = nullptr;
     wxListView* listSearch     = nullptr;
     wxTextCtrl* searchBox      = nullptr;
+    wxTextCtrl* descriptionBox = nullptr;
     wxTextCtrl* journal        = nullptr;
 
     // Parsed tables backing each list (row index == list row index).
@@ -41,6 +43,15 @@ private:
     WingetRunner runner;
     bool refreshUpgradesAfterInstalled = false;  // startup chain
     bool actionInProgress = false;               // an install/upgrade/uninstall runs
+
+    // Package description under the search results, fetched with `winget show`
+    // on a debounce so arrowing through the list does not spawn one process per
+    // row. Separate runner: never blocks real actions.
+    WingetRunner showRunner;
+    wxTimer      descTimer;
+    wxString     descPendingId;   // selection waiting for its description
+    wxString     descShownId;     // id whose description is displayed
+    void fetchDescription();
 
     // --- helpers -------------------------------------------------------------
     wxListView* currentList() const;
