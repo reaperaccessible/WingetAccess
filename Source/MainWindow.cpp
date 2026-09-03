@@ -9,6 +9,8 @@
 #include <wx/clipbrd.h>
 #include <wx/stattext.h>
 
+#include <functional>
+
 namespace
 {
 enum Ids
@@ -65,7 +67,13 @@ MainWindow::MainWindow()
     auto* root = new wxPanel(this);
     notebook = new wxNotebook(root, wxID_ANY);
 
-    auto makeListPage = [this](const wxString& title, wxListView*& listOut,
+    // On wx/MSW the accessible name a screen reader announces for a native
+    // control comes from the wxStaticText created just before it — SetName()
+    // and SetAccessible() are inert (wx never handles WM_GETOBJECT). Giving
+    // each list a static label carrying the tab name is what makes NVDA say
+    // the tab on Ctrl+1/2/3, read before the focused row.
+    auto makeListPage = [this](const wxString& title, const wxString& listLabel,
+                               wxListView*& listOut,
                                wxWindow* extraTop = nullptr, wxPanel* page = nullptr)
     {
         if (page == nullptr)
@@ -73,6 +81,8 @@ MainWindow::MainWindow()
         auto* sizer = new wxBoxSizer(wxVERTICAL);
         if (extraTop != nullptr)
             sizer->Add(extraTop, 0, wxEXPAND | wxALL, 6);
+        auto* label = new wxStaticText(page, wxID_ANY, listLabel + " :");
+        sizer->Add(label, 0, wxLEFT | wxRIGHT | wxTOP, 6);
         listOut = new wxListView(page, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                                  wxLC_REPORT | wxLC_SINGLE_SEL);
         sizer->Add(listOut, 1, wxEXPAND | wxALL, 6);
@@ -81,15 +91,15 @@ MainWindow::MainWindow()
         return page;
     };
 
-    makeListPage("Installés", listInstalled);
-    makeListPage("Mises à jour", listUpgrades);
+    makeListPage("Installés", "Installés", listInstalled);
+    makeListPage("Mises à jour", "Mises à jour", listUpgrades);
 
     // Search page: field + button above the list.
     {
         auto* page = new wxPanel(notebook);
         auto* top = new wxPanel(page);
         auto* topSizer = new wxBoxSizer(wxHORIZONTAL);
-        auto* label = new wxStaticText(top, wxID_ANY, "&Rechercher :");
+        auto* label = new wxStaticText(top, wxID_ANY, "&Recherche :");
         searchBox = new wxTextCtrl(top, wxID_ANY, wxEmptyString, wxDefaultPosition,
                                    wxDefaultSize, wxTE_PROCESS_ENTER);
         auto* goBtn = new wxButton(top, ID_SEARCH_GO, "Lancer la recherche");
@@ -97,7 +107,7 @@ MainWindow::MainWindow()
         topSizer->Add(searchBox, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
         topSizer->Add(goBtn, 0, wxALIGN_CENTER_VERTICAL);
         top->SetSizer(topSizer);
-        makeListPage("Recherche", listSearch, top, page);
+        makeListPage("Recherche", "Résultats", listSearch, top, page);
     }
 
     journal = new wxTextCtrl(root, wxID_ANY, wxEmptyString, wxDefaultPosition,
@@ -122,11 +132,46 @@ MainWindow::MainWindow()
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { Close(); }, wxID_EXIT);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { onHelpKeys(); }, ID_HELP_KEYS);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { onAbout(); }, wxID_ABOUT);
-    // Announce the tab name on Ctrl+1/2/3 (the focus lands inside the page, so
-    // NVDA would otherwise only read the focused control, not which tab).
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(0); a11y::announce("Installés"); listInstalled->SetFocus(); }, ID_TAB_INSTALLED);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(1); a11y::announce("Mises à jour"); listUpgrades->SetFocus(); }, ID_TAB_UPGRADES);
-    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(2); a11y::announce("Recherche"); searchBox->SetFocus(); }, ID_TAB_SEARCH);
+    // Ctrl+1/2/3: the tab name is spoken through the static label that names
+    // the focused control (see makeListPage) — a separate UIA notification
+    // always loses the race against the focus event and stays silent.
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(0); listInstalled->SetFocus(); }, ID_TAB_INSTALLED);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(1); listUpgrades->SetFocus(); }, ID_TAB_UPGRADES);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { notebook->SetSelection(2); searchBox->SetFocus(); }, ID_TAB_SEARCH);
+
+    // wxNotebook trap: the tab bar is the FIRST control of the frame, so a
+    // backward navigation from it has nowhere to go and wx leaves the focus in
+    // place — Shift+Tab does nothing forever, indistinguishable from a frozen
+    // app for a screen-reader user. Send the focus to the last focusable
+    // control of the current page instead.
+    notebook->Bind(wxEVT_NAVIGATION_KEY, [this](wxNavigationKeyEvent& e)
+    {
+        if (!e.GetDirection() && FindFocus() == notebook)
+        {
+            std::function<wxWindow*(wxWindow*)> lastFocusable =
+                [&lastFocusable](wxWindow* parent) -> wxWindow*
+            {
+                const auto& children = parent->GetChildren();
+                for (auto it = children.rbegin(); it != children.rend(); ++it)
+                {
+                    wxWindow* child = *it;
+                    if (!child->IsShown() || !child->IsEnabled())
+                        continue;
+                    if (wxWindow* deep = lastFocusable(child))
+                        return deep;
+                    if (child->AcceptsFocusFromKeyboard())
+                        return child;
+                }
+                return nullptr;
+            };
+            if (wxWindow* target = lastFocusable(notebook->GetCurrentPage()))
+            {
+                target->SetFocus();
+                return;
+            }
+        }
+        e.Skip();
+    });
 
     Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { runSearch(); }, ID_SEARCH_GO);
     searchBox->Bind(wxEVT_TEXT_ENTER, [this](wxCommandEvent&) { runSearch(); });
