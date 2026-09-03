@@ -8,6 +8,7 @@
 #include <wx/clipbrd.h>
 #include <wx/stattext.h>
 
+#include <algorithm>
 #include <functional>
 
 #define NOMINMAX
@@ -384,6 +385,23 @@ void MainWindow::refreshInstalled()
         [this](int exitCode, const wxString& output)
         {
             tableInstalled = wingetparser::parseFirstTable(output);
+
+            // Keep only the packages a winget source knows (Source column
+            // non-empty: winget, msstore) — the rest is installed software
+            // winget merely sees but cannot manage.
+            const int srcCol = tableInstalled.columnIndex("Source");
+            if (srcCol >= 0)
+            {
+                auto& rows = tableInstalled.rows;
+                rows.erase(std::remove_if(rows.begin(), rows.end(),
+                               [srcCol](const std::vector<wxString>& row)
+                               {
+                                   return static_cast<size_t>(srcCol) >= row.size()
+                                       || row[srcCol].empty();
+                               }),
+                           rows.end());
+            }
+
             fillList(listInstalled, tableInstalled);
             if (exitCode != 0 && tableInstalled.empty())
                 log(wxString::Format(L"winget list a échoué (code %d).", exitCode));
