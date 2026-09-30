@@ -10,6 +10,7 @@
 #include <wx/stattext.h>
 #include <wx/tokenzr.h>
 #include <wx/weakref.h>
+#include <wx/time.h>
 #include <wx/app.h>
 
 #include <algorithm>
@@ -372,6 +373,105 @@ void MainWindow::announce(const wxString& text)
                                   msg, /*activityId=*/nullptr);
         SysFreeString(msg);
     }
+}
+
+void MainWindow::announceProgress(const wxString& text)
+{
+    if (text.empty() || uiaProvider_ == nullptr)
+        return;
+    BSTR msg = SysAllocString(text.wc_str());
+    BSTR activity = SysAllocString(L"WingetAccess.Progress");
+    if (msg != nullptr && activity != nullptr)
+        UiaRaiseNotificationEvent(static_cast<IRawElementProviderSimple*>(uiaProvider_),
+                                  NotificationKind_ActionCompleted,
+                                  NotificationProcessing_MostRecent,
+                                  msg, activity);
+    SysFreeString(msg);
+    SysFreeString(activity);
+}
+
+// --- action progress ---------------------------------------------------------
+
+void MainWindow::resetProgress()
+{
+    progressLabel.clear();
+    lastProgressStep = 0;
+    lastProgressPercent = 0;
+    lastProgressTick = 0;
+    progressCleared = false;
+    sawDeterminate = false;
+    phaseAnnounced = false;
+}
+
+void MainWindow::onActionLine(const wxString& line)
+{
+    log(line);
+
+    // Phase names, only to label the percentages and say when the installer
+    // starts. winget writes them in the Windows language; anything else still
+    // gets bare percentages and the language-independent spinner cue below.
+    const wxString lower = line.Lower();
+    if (lower.StartsWith(wxString::FromUTF8("téléchargement en cours"))  // utf8-ok
+        || lower.StartsWith("downloading "))
+    {
+        progressLabel = loc::tr("Downloading", "Téléchargement");
+        lastProgressStep = 0;
+    }
+    else if (!phaseAnnounced
+             && (lower.Contains(wxString::FromUTF8("désinstallation du package"))  // utf8-ok
+                 || lower.Contains("starting package uninstall")))
+    {
+        phaseAnnounced = true;
+        announceProgress(loc::tr("Uninstalling…", "Désinstallation en cours…"));
+    }
+    else if (!phaseAnnounced
+             && (lower.Contains("installation du package")
+                 || lower.Contains("starting package install")))
+    {
+        phaseAnnounced = true;
+        announceProgress(loc::tr("Installing…", "Installation en cours…"));
+    }
+}
+
+void MainWindow::onActionProgress(int state, int percent)
+{
+    // OSC 9;4 states: 0 cleared, 1 normal, 2 error, 3 indeterminate, 4 paused.
+    if (state == 0)
+    {
+        progressCleared = true;
+        return;
+    }
+    if (state == 3)
+    {
+        // A spinner after a percentage phase = the installer is running.
+        if (sawDeterminate && !phaseAnnounced)
+        {
+            phaseAnnounced = true;
+            announceProgress(loc::tr("Installing…", "Installation en cours…"));
+        }
+        return;
+    }
+
+    // A new percentage phase (another file) starts from the beginning.
+    if (progressCleared && percent < lastProgressPercent)
+        lastProgressStep = 0;
+    progressCleared = false;
+    sawDeterminate = true;
+    lastProgressPercent = percent;
+
+    const int step = percent / 5 * 5;
+    if (step < 5 || step <= lastProgressStep)
+        return;
+    // Steps crossed faster than speech: skip to the next update, which will
+    // carry a higher value, rather than queue stale percentages. 100 % always.
+    const long long now = wxGetLocalTimeMillis().GetValue();
+    if (step < 100 && now - lastProgressTick < 800)
+        return;
+    lastProgressStep = step;
+    lastProgressTick = now;
+
+    const wxString value = wxString::Format(loc::tr("%d%%", "%d %%"), step);
+    announceProgress(progressLabel.empty() ? value : progressLabel + " " + value);
 }
 
 // --- helpers -----------------------------------------------------------------
@@ -1048,9 +1148,11 @@ void MainWindow::fetchDescription()
 void MainWindow::runAction(const std::vector<wxString>& args, const wxString& announceStart,
                            std::function<void(int exitCode)> then)
 {
-    const bool started = runner.start(
+    resetProgress();
+    const bool started = runner.startWithProgress(
         args,
-        [this](const wxString& line) { log(line); },
+        [this](const wxString& line) { onActionLine(line); },
+        [this](int state, int percent) { onActionProgress(state, percent); },
         [this, then](int exitCode, const wxString&)
         {
             actionInProgress = false;

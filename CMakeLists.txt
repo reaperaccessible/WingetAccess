@@ -23,6 +23,7 @@ add_executable(WingetAccess WIN32
     Source/WingetSetup.cpp
     Source/SelfUpdate.cpp
     Source/Localization.cpp
+    Source/TerminalStream.cpp
     Source/WingetAccess.rc     # manifest (asInvoker/DPI) + version info
 )
 
@@ -64,6 +65,27 @@ if(BUILD_PARSETEST)
     target_link_libraries(parsetest PRIVATE ${wxWidgets_LIBRARIES})
     if(MSVC)
         target_compile_options(parsetest PRIVATE "/utf-8")
+    endif()
+
+    # Pseudo-console capture: what winget prints when it believes it is in a
+    # terminal (its progress bar), raw.
+    add_executable(ptytest tools/ptytest.cpp)
+
+    # The real runner (pseudo console) on a harmless winget command.
+    add_executable(runnertest tools/runnertest.cpp Source/WingetRunner.cpp
+                   Source/TerminalStream.cpp Source/Localization.cpp)
+    target_include_directories(runnertest PRIVATE Source)
+    target_link_libraries(runnertest PRIVATE ${wxWidgets_LIBRARIES})
+    if(MSVC)
+        target_compile_options(runnertest PRIVATE "/utf-8")
+    endif()
+
+    # Terminal decoder on captured outputs: clean lines + progress events.
+    add_executable(vtparsetest tools/vtparsetest.cpp Source/TerminalStream.cpp)
+    target_include_directories(vtparsetest PRIVATE Source)
+    target_link_libraries(vtparsetest PRIVATE ${wxWidgets_LIBRARIES})
+    if(MSVC)
+        target_compile_options(vtparsetest PRIVATE "/utf-8")
     endif()
 
     # Winget-setup harness: version parsing, and the PowerShell repair/update

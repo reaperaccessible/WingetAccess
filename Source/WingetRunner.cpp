@@ -1,5 +1,6 @@
 #include "WingetRunner.h"
 #include "Localization.h"
+#include "TerminalStream.h"
 
 #include <wx/app.h>
 #include <wx/utils.h>
@@ -43,14 +44,39 @@ std::wstring quoteArg(const wxString& arg)
     return out;
 }
 
-// winget emits UTF-8 when its output is redirected; strip CR, backspaces and
-// stray VT escape sequences defensively before splitting into lines.
+// winget emits UTF-8 when its output is redirected.
 wxString decodeChunk(const std::string& bytes)
 {
     wxString text = wxString::FromUTF8(bytes.c_str(), bytes.size());
     if (text.empty() && !bytes.empty())
         text = wxString(bytes.c_str(), wxConvLocal, bytes.size());
     return text;
+}
+
+// ConPTY exists from Windows 10 1809 (winget's own minimum); looked up at run
+// time so the program still starts, on pipes, where it does not.
+using CreatePseudoConsoleFn = HRESULT (WINAPI*)(COORD, HANDLE, HANDLE, DWORD, HPCON*);
+using ClosePseudoConsoleFn  = void (WINAPI*)(HPCON);
+
+struct ConPtyApi
+{
+    CreatePseudoConsoleFn create = nullptr;
+    ClosePseudoConsoleFn  close  = nullptr;
+    ConPtyApi()
+    {
+        if (HMODULE k = GetModuleHandleW(L"kernel32.dll"))
+        {
+            create = reinterpret_cast<CreatePseudoConsoleFn>(GetProcAddress(k, "CreatePseudoConsole"));
+            close  = reinterpret_cast<ClosePseudoConsoleFn>(GetProcAddress(k, "ClosePseudoConsole"));
+        }
+    }
+    bool available() const { return create != nullptr && close != nullptr; }
+};
+
+const ConPtyApi& conPty()
+{
+    static const ConPtyApi api;
+    return api;
 }
 
 } // namespace
@@ -85,7 +111,16 @@ bool WingetRunner::start(const std::vector<wxString>& args,
                          LineCallback onLine,
                          DoneCallback onDone)
 {
-    return launch(wingetPath(), args, "Y\r\nY\r\nY\r\n", onLine, onDone);
+    return launch(wingetPath(), args, "Y\r\nY\r\nY\r\n", false, onLine, nullptr, onDone);
+}
+
+bool WingetRunner::startWithProgress(const std::vector<wxString>& args,
+                                     LineCallback onLine,
+                                     ProgressCallback onProgress,
+                                     DoneCallback onDone)
+{
+    return launch(wingetPath(), args, "Y\r\nY\r\nY\r\n", conPty().available(),
+                  onLine, onProgress, onDone);
 }
 
 bool WingetRunner::startProgram(const wxString& program,
@@ -93,13 +128,15 @@ bool WingetRunner::startProgram(const wxString& program,
                                 LineCallback onLine,
                                 DoneCallback onDone)
 {
-    return launch(program, args, std::string(), onLine, onDone);
+    return launch(program, args, std::string(), false, onLine, nullptr, onDone);
 }
 
 bool WingetRunner::launch(const wxString& program,
                           const std::vector<wxString>& args,
                           const std::string& stdinText,
+                          bool pseudoConsole,
                           LineCallback onLine,
+                          ProgressCallback onProgress,
                           DoneCallback onDone)
 {
     launchFailed = false;
@@ -115,60 +152,88 @@ bool WingetRunner::launch(const wxString& program,
         cmd += quoteArg(a);
     }
 
-    // Inheritable pipe for the child's stdout+stderr.
+    auto internalError = [&]()
+    {
+        busy.store(false);
+        if (onLine)
+            onLine(loc::tr("Internal error: CreatePipe failed.", "Erreur interne : CreatePipe a échoué."));
+        return false;
+    };
+
+    // In a pseudo console the handles are not inherited: ConPTY owns them.
     SECURITY_ATTRIBUTES sa {};
     sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
+    sa.bInheritHandle = pseudoConsole ? FALSE : TRUE;
 
-    HANDLE readEnd = nullptr, writeEnd = nullptr;
-    if (!CreatePipe(&readEnd, &writeEnd, &sa, 0))
-    {
-        busy.store(false);
-        if (onLine)
-            onLine(loc::tr("Internal error: CreatePipe failed.", "Erreur interne : CreatePipe a échoué."));
-        return false;
-    }
-    SetHandleInformation(readEnd, HANDLE_FLAG_INHERIT, 0);
-
-    // Standard input: a pipe holding `stdinText`, write end closed so the
-    // child reads the prepared answers then end-of-file (never blocks).
-    HANDLE inRead = nullptr, inWrite = nullptr;
+    // Output pipe (the child's stdout+stderr, or what the pseudo console
+    // renders) and input pipe (prepared answers, then end of file).
+    HANDLE outRead = nullptr, outWrite = nullptr, inRead = nullptr, inWrite = nullptr;
+    if (!CreatePipe(&outRead, &outWrite, &sa, 0))
+        return internalError();
     if (!CreatePipe(&inRead, &inWrite, &sa, 0))
     {
-        CloseHandle(readEnd);
-        CloseHandle(writeEnd);
-        busy.store(false);
-        if (onLine)
-            onLine(loc::tr("Internal error: CreatePipe failed.", "Erreur interne : CreatePipe a échoué."));
-        return false;
+        CloseHandle(outRead);
+        CloseHandle(outWrite);
+        return internalError();
     }
+    SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
     SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0);
     if (!stdinText.empty())
     {
         DWORD written = 0;
-        WriteFile(inWrite, stdinText.data(), static_cast<DWORD>(stdinText.size()),
-                  &written, nullptr);
+        WriteFile(inWrite, stdinText.data(), static_cast<DWORD>(stdinText.size()), &written, nullptr);
     }
-    CloseHandle(inWrite);
 
-    STARTUPINFOW si {};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdOutput = writeEnd;
-    si.hStdError  = writeEnd;
-    si.hStdInput  = inRead;
+    HPCON console = nullptr;
+    LPPROC_THREAD_ATTRIBUTE_LIST attrs = nullptr;
+    STARTUPINFOEXW si {};
+    si.StartupInfo.cb = sizeof(si);
+    si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    DWORD flags = CREATE_NO_WINDOW;
+
+    if (pseudoConsole
+        && SUCCEEDED(conPty().create(COORD { 250, 50 }, inRead, outWrite, 0, &console)))
+    {
+        // Wide enough that winget never wraps a line.
+        SIZE_T size = 0;
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
+        attrs = static_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(HeapAlloc(GetProcessHeap(), 0, size));
+        InitializeProcThreadAttributeList(attrs, 1, 0, &size);
+        UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, console,
+                                  sizeof(console), nullptr, nullptr);
+        si.lpAttributeList = attrs;
+        // Null standard handles: otherwise a parent whose own output is
+        // redirected hands them down and the child bypasses the console.
+        flags = EXTENDED_STARTUPINFO_PRESENT;
+    }
+    else
+    {
+        pseudoConsole = false;
+        si.StartupInfo.hStdOutput = outWrite;
+        si.StartupInfo.hStdError  = outWrite;
+        si.StartupInfo.hStdInput  = inRead;
+    }
 
     PROCESS_INFORMATION pi {};
     std::wstring mutableCmd = cmd;  // CreateProcessW may modify the buffer
     const BOOL ok = CreateProcessW(nullptr, mutableCmd.data(), nullptr, nullptr,
-                                   TRUE, CREATE_NO_WINDOW, nullptr, nullptr,
-                                   &si, &pi);
-    CloseHandle(writeEnd);
+                                   pseudoConsole ? FALSE : TRUE, flags, nullptr, nullptr,
+                                   &si.StartupInfo, &pi);
+    // The child (or the pseudo console) has its own copies now.
+    CloseHandle(outWrite);
     CloseHandle(inRead);
+    if (attrs != nullptr)
+    {
+        DeleteProcThreadAttributeList(attrs);
+        HeapFree(GetProcessHeap(), 0, attrs);
+    }
 
     if (!ok)
     {
-        CloseHandle(readEnd);
+        if (console != nullptr)
+            conPty().close(console);
+        CloseHandle(outRead);
+        CloseHandle(inWrite);
         launchFailed = true;
         busy.store(false);
         return false;
@@ -177,51 +242,48 @@ bool WingetRunner::launch(const wxString& program,
     CloseHandle(pi.hThread);
     processHandle.store(pi.hProcess);
 
-    std::thread([this, readEnd, process = pi.hProcess, onLine, onDone]()
+    std::thread([this, outRead, inWrite, console, process = pi.hProcess,
+                 onLine, onProgress, onDone]()
     {
-        std::string pending;   // bytes not yet terminated by \n
-        std::string all;       // full raw output
+        std::string all;   // full raw output (the lists parse it)
 
-        char buffer[4096];
-        DWORD got = 0;
-        while (ReadFile(readEnd, buffer, sizeof(buffer), &got, nullptr) && got > 0)
-        {
-            pending.append(buffer, got);
-            all.append(buffer, got);
-
-            // Deliver complete lines as they arrive.
-            size_t nl;
-            while ((nl = pending.find('\n')) != std::string::npos)
+        TerminalStream stream(
+            [onLine](const wxString& line)
             {
-                std::string raw = pending.substr(0, nl);
-                pending.erase(0, nl + 1);
+                if (onLine != nullptr && wxTheApp != nullptr)
+                    wxTheApp->CallAfter([onLine, line]() { onLine(line); });
+            },
+            [onProgress](int state, int percent)
+            {
+                if (onProgress != nullptr && wxTheApp != nullptr)
+                    wxTheApp->CallAfter([onProgress, state, percent]() { onProgress(state, percent); });
+            });
 
-                // Progress redraws use CR without LF; keep only the last
-                // segment. Drop backspace/escape control bytes.
-                const size_t cr = raw.find_last_of('\r');
-                if (cr != std::string::npos)
-                    raw.erase(0, cr + 1);
-                std::string clean;
-                clean.reserve(raw.size());
-                for (char c : raw)
-                    if (c != '\b' && c != '\x1b' && c != '\r')
-                        clean += c;
-
-                if (onLine != nullptr && !clean.empty() && wxTheApp != nullptr)
-                {
-                    const wxString line = decodeChunk(clean);
-                    if (!line.Strip(wxString::both).empty())
-                        wxTheApp->CallAfter([onLine, line]() { onLine(line); });
-                }
+        // Output is read on its own thread: with a pseudo console the pipe only
+        // ends once the console is closed, which must follow the process exit.
+        std::thread reader([&]()
+        {
+            char buffer[4096];
+            DWORD got = 0;
+            while (ReadFile(outRead, buffer, sizeof(buffer), &got, nullptr) && got > 0)
+            {
+                all.append(buffer, got);
+                stream.feed(buffer, got);
             }
-        }
-        CloseHandle(readEnd);
+        });
 
         WaitForSingleObject(process, INFINITE);
         DWORD exitCode = static_cast<DWORD>(-1);
         GetExitCodeProcess(process, &exitCode);
         processHandle.store(nullptr);
         CloseHandle(process);
+
+        if (console != nullptr)
+            conPty().close(console);   // flushes the last output, ends the reader
+        reader.join();
+        stream.finish();
+        CloseHandle(outRead);
+        CloseHandle(inWrite);
 
         const wxString fullOutput = decodeChunk(all);
         busy.store(false);

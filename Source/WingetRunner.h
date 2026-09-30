@@ -5,15 +5,26 @@
 #include <vector>
 #include <atomic>
 
-// Runs a console program hidden (no window), captures stdout+stderr merged, and
-// delivers output lines and completion on the UI thread via wxTheApp->CallAfter.
+// Runs a console program hidden (no window), and delivers its output lines,
+// progress and completion on the UI thread via wxTheApp->CallAfter.
 //
-// One operation at a time: start() fails if a run is already in progress.
+// Two ways to run winget:
+//  * start(): through a pipe. winget then prints plain lines and no progress.
+//    Used for the lists and the search, whose columns are parsed.
+//  * startWithProgress(): inside a pseudo console (ConPTY). winget believes it
+//    is in a terminal and reports its progress (OSC 9;4), turned into
+//    onProgress calls. Used for install / upgrade / uninstall. Falls back to a
+//    pipe where ConPTY does not exist.
+// Either way the output goes through TerminalStream, so the lines handed to
+// onLine are clean text.
+//
+// One operation at a time: a start fails if a run is already in progress.
 class WingetRunner
 {
 public:
-    using LineCallback = std::function<void(const wxString& line)>;
-    using DoneCallback = std::function<void(int exitCode, const wxString& fullOutput)>;
+    using LineCallback     = std::function<void(const wxString& line)>;
+    using ProgressCallback = std::function<void(int state, int percent)>;
+    using DoneCallback     = std::function<void(int exitCode, const wxString& fullOutput)>;
 
     WingetRunner() = default;
     ~WingetRunner();
@@ -28,8 +39,14 @@ public:
                LineCallback onLine,
                DoneCallback onDone);
 
-    // Same, for any program (PowerShell for the winget repair steps). Its
-    // standard input is empty.
+    // Same, inside a pseudo console, with progress events.
+    bool startWithProgress(const std::vector<wxString>& args,
+                           LineCallback onLine,
+                           ProgressCallback onProgress,
+                           DoneCallback onDone);
+
+    // Same as start(), for any program (PowerShell for the winget repair
+    // steps). Its standard input is empty.
     bool startProgram(const wxString& program,
                       const std::vector<wxString>& args,
                       LineCallback onLine,
@@ -37,8 +54,8 @@ public:
 
     bool isBusy() const { return busy.load(); }
 
-    // True when the last start()/startProgram() call could not create the
-    // process at all (winget missing), as opposed to "busy".
+    // True when the last start call could not create the process at all
+    // (winget missing), as opposed to "busy".
     bool lastLaunchFailed() const { return launchFailed; }
 
     // Kills a running process (used at shutdown only).
@@ -53,7 +70,9 @@ private:
     bool launch(const wxString& program,
                 const std::vector<wxString>& args,
                 const std::string& stdinText,
+                bool pseudoConsole,
                 LineCallback onLine,
+                ProgressCallback onProgress,
                 DoneCallback onDone);
 
     std::atomic<bool>  busy { false };

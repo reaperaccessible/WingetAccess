@@ -30,7 +30,24 @@ private:
     // provider: a raw wx window is MSAA-only and NVDA silently ignores
     // UiaRaiseNotificationEvent from a bare host provider (Manager 1.30 trap).
     void announce(const wxString& text);
+    // Progress: raised as "most recent" of one activity, so a screen reader
+    // may drop a stale percentage instead of queueing it.
+    void announceProgress(const wxString& text);
     void* uiaProvider_ = nullptr;
+
+    // --- action progress (install / upgrade / uninstall) ---------------------
+    // winget reports a percentage while it downloads (OSC 9;4 in a pseudo
+    // console); running the installer itself shows only a spinner.
+    wxString progressLabel;          // "Downloading" once winget says so
+    int      lastProgressStep = 0;   // last 5 % step announced
+    int      lastProgressPercent = 0;
+    long long lastProgressTick = 0;  // ms, to skip steps crossed too fast
+    bool     progressCleared = false;
+    bool     sawDeterminate = false; // a percentage phase happened
+    bool     phaseAnnounced = false; // "Installing…" already said
+    void resetProgress();
+    void onActionLine(const wxString& line);
+    void onActionProgress(int state, int percent);
 
     // --- UI ------------------------------------------------------------------
     wxNotebook* notebook       = nullptr;
