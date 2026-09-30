@@ -20,6 +20,7 @@ add_executable(WingetAccess WIN32
     Source/MainWindow.cpp
     Source/WingetRunner.cpp
     Source/WingetParser.cpp
+    Source/WingetSetup.cpp
     Source/WingetAccess.rc     # manifest (asInvoker/DPI) + version info
 )
 
@@ -55,5 +56,17 @@ if(BUILD_PARSETEST)
     target_link_libraries(parsetest PRIVATE ${wxWidgets_LIBRARIES})
     if(MSVC)
         target_compile_options(parsetest PRIVATE "/utf-8")
+    endif()
+
+    # Winget-setup harness: version parsing, and the PowerShell repair/update
+    # scripts dumped or run exactly as the app encodes them.
+    add_executable(setuptest
+        tools/setuptest.cpp
+        Source/WingetSetup.cpp
+    )
+    target_include_directories(setuptest PRIVATE Source)
+    target_link_libraries(setuptest PRIVATE ${wxWidgets_LIBRARIES})
+    if(MSVC)
+        target_compile_options(setuptest PRIVATE "/utf-8")
     endif()
 endif()

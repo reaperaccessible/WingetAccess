@@ -32,6 +32,11 @@ naturellement.
 - **Journal** — toute la sortie de winget reste lisible en bas de la fenêtre,
   et les événements sont annoncés au lecteur d'écran (« Mise à jour de
   Firefox… », « Terminé », « 10 mises à jour »).
+- **Autonome** — au démarrage, WingetAccess vérifie winget et le prépare tout
+  seul : sur une machine fraîchement installée, il enregistre, répare ou
+  installe le Programme d'installation d'application ; il accepte les
+  conditions des sources ; et quand une nouvelle version de winget existe, il
+  l'installe en premier, avant tout le reste.
 
 ### Raccourcis
 
@@ -45,7 +50,9 @@ naturellement.
 
 ### Prérequis
 
-- Windows 10 ou 11 avec **winget** (App Installer, présent par défaut).
+- Windows 10 ou 11. winget (Programme d'installation d'application) est
+  préparé automatiquement s'il manque ; une connexion Internet peut alors être
+  nécessaire.
 - Aucune installation : posez `WingetAccess.exe` où vous voulez et lancez-le.
   Les demandes d'élévation (UAC) viennent de winget lui-même, au moment voulu.
 
@@ -84,10 +91,15 @@ JAWS and Narrator read everything out of the box.
   targeted when one ID covers several installations.
 - **Log** — winget's full output stays readable at the bottom of the window,
   and events are announced to the screen reader.
+- **Self-sufficient** — at startup, WingetAccess checks winget and prepares
+  it on its own: on a freshly installed machine it registers, repairs or
+  installs App Installer; it accepts the source agreements; and when a newer
+  winget exists, it installs it first, before anything else.
 
 ### Requirements
 
-- Windows 10 or 11 with **winget** (App Installer, present by default).
+- Windows 10 or 11. winget (App Installer) is prepared automatically when
+  missing; an Internet connection may then be needed.
 - No installation: put `WingetAccess.exe` anywhere and run it. Elevation
   prompts (UAC) come from winget itself, when needed.
 

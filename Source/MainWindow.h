@@ -7,8 +7,12 @@
 #include <wx/button.h>
 #include <wx/timer.h>
 
+#include <deque>
+#include <functional>
+
 #include "WingetRunner.h"
 #include "WingetParser.h"
+#include "WingetSetup.h"
 
 class MainWindow : public wxFrame
 {
@@ -44,6 +48,35 @@ private:
     bool refreshUpgradesAfterInstalled = false;  // startup chain
     bool actionInProgress = false;               // an install/upgrade/uninstall runs
 
+    // --- winget readiness ----------------------------------------------------
+    // At startup (and on F5 while winget is unusable) WingetAccess checks
+    // `winget --version`, repairs or updates App Installer on its own, and
+    // updates App Installer first when an update is listed for it.
+    bool wingetReady = false;
+    bool maintenance = false;              // App Installer being repaired/updated
+    bool autoUpdateAppInstaller = false;   // pending check after the refresh chain
+    bool appInstallerAutoTried = false;    // once per session, never loops
+    void ensureWinget(std::function<void()> then);
+    void probeWinget(std::function<void(const wingetsetup::Version&)> then);
+    void runRepairStep(size_t step, std::function<void()> then);
+    void updateAppInstaller(std::function<void(bool ok)> then);
+    void startRefreshChain(bool withAppInstallerCheck);
+    bool appInstallerUpdateListed() const;
+    void reportStartFailure();
+
+    // Delayed call (lets a freshly registered App Installer settle before the
+    // next `winget --version`).
+    wxTimer               delayTimer;
+    std::function<void()> delayedCall;
+    void callLater(int ms, std::function<void()> fn);
+
+    // "Upgrade all" runs one package at a time: App Installer first (outside
+    // winget), then each listed package, with a spoken "N of M".
+    struct PendingUpgrade { wxString id; wxString name; };
+    std::deque<PendingUpgrade> upgradeQueue;
+    size_t upgradeTotal = 0, upgradeDone = 0, upgradeFailed = 0;
+    void runNextQueuedUpgrade();
+
     // Package description under the search results, fetched with `winget show`
     // on a debounce so arrowing through the list does not spawn one process per
     // row. Separate runner: never blocks real actions.
@@ -66,9 +99,11 @@ private:
     void refreshUpgrades();
     void runSearch();
 
-    // Streams a winget action (install/upgrade/uninstall) into the journal and
-    // refreshes the lists when done.
-    void runAction(const std::vector<wxString>& args, const wxString& announceStart);
+    // Streams a winget action (install/upgrade/uninstall) into the journal.
+    // Without `then`, announces the result and refreshes the lists; with it,
+    // hands the exit code over instead (queued upgrades).
+    void runAction(const std::vector<wxString>& args, const wxString& announceStart,
+                   std::function<void(int exitCode)> then = nullptr);
 
     // --- handlers ------------------------------------------------------------
     void onCharHook(wxKeyEvent& e);

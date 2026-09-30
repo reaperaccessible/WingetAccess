@@ -89,6 +89,8 @@ enum Ids
     ID_TAB_UPGRADES,
     ID_TAB_SEARCH,
     ID_SEARCH_GO,
+    ID_DESC_TIMER,
+    ID_DELAY_TIMER,
 };
 
 const wxString kBusyMsg = L"Occupé, opération en cours";
@@ -280,17 +282,23 @@ MainWindow::MainWindow()
     bindDescription(listInstalled, &tableInstalled, 0);
     bindDescription(listUpgrades, &tableUpgrades, 1);
     bindDescription(listSearch, &tableSearch, 2);
-    descTimer.SetOwner(this);
-    Bind(wxEVT_TIMER, [this](wxTimerEvent&) { fetchDescription(); });
+    descTimer.SetOwner(this, ID_DESC_TIMER);
+    Bind(wxEVT_TIMER, [this](wxTimerEvent&) { fetchDescription(); }, ID_DESC_TIMER);
+    delayTimer.SetOwner(this, ID_DELAY_TIMER);
+    Bind(wxEVT_TIMER, [this](wxTimerEvent&)
+    {
+        auto fn = std::move(delayedCall);
+        delayedCall = nullptr;
+        if (fn)
+            fn();
+    }, ID_DELAY_TIMER);
 
     // Plain keys (Delete) are never delivered through accelerators when the
     // focus sits in a list or text control; route them with a CHAR_HOOK.
     Bind(wxEVT_CHAR_HOOK, &MainWindow::onCharHook, this);
 
-    log(wxString::Format(L"WingetAccess %s. Chargement des paquets installés…",
-                         WINGETACCESS_VERSION_STR));
-    refreshUpgradesAfterInstalled = true;
-    refreshInstalled();
+    log(wxString::Format(L"WingetAccess %s.", WINGETACCESS_VERSION_STR));
+    ensureWinget([this]() { startRefreshChain(true); });
 }
 
 MainWindow::~MainWindow()
@@ -422,6 +430,233 @@ void MainWindow::fillList(wxListView* list, const wingetparser::Table& table)
     }
 }
 
+// --- winget readiness --------------------------------------------------------
+
+void MainWindow::callLater(int ms, std::function<void()> fn)
+{
+    delayedCall = std::move(fn);
+    delayTimer.Start(ms, wxTIMER_ONE_SHOT);
+}
+
+void MainWindow::probeWinget(std::function<void(const wingetsetup::Version&)> then)
+{
+    const bool started = runner.start(
+        { "--version" },
+        nullptr,
+        [then](int exitCode, const wxString& output)
+        {
+            wingetsetup::Version v;
+            if (exitCode == 0)
+                v = wingetsetup::parseVersion(output);
+            then(v);
+        });
+    if (!started)
+    {
+        if (runner.lastLaunchFailed())
+            then(wingetsetup::Version {});   // winget absent: not found
+        else
+            announce(kBusyMsg);
+    }
+}
+
+void MainWindow::ensureWinget(std::function<void()> then)
+{
+    log(L"Vérification de winget…");
+    probeWinget([this, then](const wingetsetup::Version& v)
+    {
+        if (v.recentEnough())
+        {
+            wingetReady = true;
+            log(wxString::Format(L"winget %s prêt.", v.text));
+            then();
+            return;
+        }
+        if (v.found)
+            log(wxString::Format(L"winget %s est trop ancien (minimum %d.%d), mise à jour…",
+                                 v.text, wingetsetup::kMinMajor, wingetsetup::kMinMinor));
+        else
+            log(L"winget est introuvable ou inactif sur cette machine, préparation…");
+        announce(L"Préparation de winget…");
+        runRepairStep(0, then);
+    });
+}
+
+void MainWindow::runRepairStep(size_t step, std::function<void()> then)
+{
+    struct Step { const wchar_t* label; wxString (*script)(); };
+    static const Step steps[] = {
+        { L"Enregistrement du Programme d'installation d'application…",
+          &wingetsetup::scriptRegisterAppInstaller },
+        { L"Réparation de winget par l'outil de Microsoft (module WinGet)…",
+          &wingetsetup::scriptRepairWithModule },
+        { L"Téléchargement du paquet officiel de winget (environ 220 Mo)…",
+          &wingetsetup::scriptInstallOfficialBundle },
+    };
+    const size_t stepCount = sizeof(steps) / sizeof(steps[0]);
+
+    if (step >= stepCount)
+    {
+        // Every repair failed: keep going with an old winget if there is one,
+        // otherwise explain and wait for F5.
+        maintenance = false;
+        probeWinget([this, then](const wingetsetup::Version& v)
+        {
+            if (v.found)
+            {
+                wingetReady = true;
+                log(wxString::Format(L"winget %s n'a pas pu être mis à jour ; certaines fonctions "
+                                     L"peuvent échouer.", v.text));
+                announce(L"winget ancien, mise à jour impossible");
+                then();
+                return;
+            }
+            wingetReady = false;
+            log(L"winget n'a pas pu être installé automatiquement.");
+            announce(L"winget introuvable");
+            wxMessageBox(
+                L"WingetAccess n'a pas pu préparer winget sur cette machine.\n\n"
+                L"Vérifie la connexion Internet, puis appuie sur F5 pour réessayer.\n"
+                L"Tu peux aussi installer « Programme d'installation d'application » "
+                L"depuis le Microsoft Store, puis appuyer sur F5.\n\n"
+                L"Le détail des erreurs est dans le journal.",
+                L"winget introuvable", wxOK | wxICON_WARNING, this);
+        });
+        return;
+    }
+
+    maintenance = true;
+    const wxString label = steps[step].label;
+    log(label);
+    announce(label);
+
+    const bool started = runner.startProgram(
+        wingetsetup::powershellPath(),
+        wingetsetup::powershellArgs(steps[step].script()),
+        [this](const wxString& line) { log(line); },
+        [this, step, then](int, const wxString&)
+        {
+            // Let a freshly registered package expose its winget alias.
+            callLater(1500, [this, step, then]()
+            {
+                probeWinget([this, step, then](const wingetsetup::Version& v)
+                {
+                    if (!v.recentEnough())
+                    {
+                        runRepairStep(step + 1, then);
+                        return;
+                    }
+                    maintenance = false;
+                    wingetReady = true;
+                    log(wxString::Format(L"winget %s prêt.", v.text));
+                    announce(L"winget prêt");
+                    then();
+                });
+            });
+        });
+    if (!started)
+    {
+        log(L"Impossible de lancer PowerShell.");
+        runRepairStep(step + 1, then);
+    }
+}
+
+bool MainWindow::appInstallerUpdateListed() const
+{
+    const int idCol = tableUpgrades.columnIndex("ID");
+    if (idCol < 0)
+        return false;
+    for (const auto& row : tableUpgrades.rows)
+        if (static_cast<size_t>(idCol) < row.size() && wingetsetup::isAppInstallerId(row[idCol]))
+            return true;
+    return false;
+}
+
+void MainWindow::updateAppInstaller(std::function<void(bool ok)> then)
+{
+    maintenance = true;
+    probeWinget([this, then](const wingetsetup::Version& before)
+    {
+        const wxString start = L"Mise à jour de winget (Programme d'installation d'application)…";
+        log(start);
+        announce(start);
+
+        // Shared end: compare the version, report, hand over.
+        auto finish = [this, then, before](int exitCode)
+        {
+            callLater(1500, [this, then, before, exitCode]()
+            {
+                probeWinget([this, then, before, exitCode](const wingetsetup::Version& after)
+                {
+                    maintenance = false;
+                    const bool ok = after.recentEnough()
+                                 && (exitCode == 0 || after.text != before.text);
+                    if (ok)
+                    {
+                        log(wxString::Format(L"winget mis à jour : %s.", after.text));
+                        announce(wxString::Format(L"winget mis à jour, version %s", after.text));
+                    }
+                    else
+                    {
+                        log(L"Échec de la mise à jour de winget.");
+                        announce(L"Échec de la mise à jour de winget");
+                    }
+                    then(ok);
+                });
+            });
+        };
+
+        const bool started = runner.startProgram(
+            wingetsetup::powershellPath(),
+            wingetsetup::powershellArgs(
+                wingetsetup::scriptUpdateAppInstaller(WingetRunner::wingetPath())),
+            [this](const wxString& line) { log(line); },
+            [this, finish](int exitCode, const wxString&)
+            {
+                if (exitCode == 0)
+                {
+                    finish(0);
+                    return;
+                }
+                // The new version may need dependencies the direct install
+                // skipped: Microsoft's repair tool installs them.
+                log(L"Installation directe impossible, réparation par l'outil de Microsoft…");
+                const bool again = runner.startProgram(
+                    wingetsetup::powershellPath(),
+                    wingetsetup::powershellArgs(wingetsetup::scriptRepairWithModule()),
+                    [this](const wxString& line) { log(line); },
+                    [finish](int code, const wxString&) { finish(code); });
+                if (!again)
+                    finish(exitCode);
+            });
+        if (!started)
+        {
+            log(L"Impossible de lancer PowerShell.");
+            maintenance = false;
+            then(false);
+        }
+    });
+}
+
+void MainWindow::startRefreshChain(bool withAppInstallerCheck)
+{
+    autoUpdateAppInstaller = withAppInstallerCheck && !appInstallerAutoTried;
+    log(L"Chargement des paquets installés…");
+    refreshUpgradesAfterInstalled = true;
+    refreshInstalled();
+}
+
+void MainWindow::reportStartFailure()
+{
+    if (runner.lastLaunchFailed())
+    {
+        wingetReady = false;
+        log(L"winget est introuvable.");
+        ensureWinget([this]() { startRefreshChain(true); });
+    }
+    else
+        announce(kBusyMsg);
+}
+
 // --- refreshes ---------------------------------------------------------------
 
 void MainWindow::refreshInstalled()
@@ -464,7 +699,7 @@ void MainWindow::refreshInstalled()
                 announce(wxString::Format(L"%zu paquets installés", tableInstalled.rows.size()));
         });
     if (!started)
-        announce(kBusyMsg);
+        reportStartFailure();
 }
 
 void MainWindow::refreshUpgrades()
@@ -480,10 +715,23 @@ void MainWindow::refreshUpgrades()
                 log(wxString::Format(L"winget upgrade a échoué (code %d).", exitCode));
             else
                 log(wxString::Format(L"%zu mises à jour disponibles.", tableUpgrades.rows.size()));
+
+            // winget itself first: an outdated App Installer is updated on its
+            // own at startup (once per session), then the lists are reloaded.
+            if (autoUpdateAppInstaller)
+            {
+                autoUpdateAppInstaller = false;
+                if (appInstallerUpdateListed())
+                {
+                    appInstallerAutoTried = true;
+                    updateAppInstaller([this](bool) { startRefreshChain(false); });
+                    return;
+                }
+            }
             announce(wxString::Format(L"%zu mises à jour", tableUpgrades.rows.size()));
         });
     if (!started)
-        announce(kBusyMsg);
+        reportStartFailure();
 }
 
 void MainWindow::runSearch()
@@ -521,16 +769,17 @@ void MainWindow::runSearch()
         announce(L"Recherche…");
     }
     else
-        announce(kBusyMsg);
+        reportStartFailure();
 }
 
 void MainWindow::fetchDescription()
 {
     if (descPendingId.empty() || descPendingPage < 0)
         return;
-    if (showRunner.isBusy())
+    // While App Installer is replaced, winget can be shut down mid-run: wait.
+    if (showRunner.isBusy() || maintenance)
     {
-        descTimer.Start(400, wxTIMER_ONE_SHOT);   // retry once the current show ends
+        descTimer.Start(maintenance ? 1500 : 400, wxTIMER_ONE_SHOT);
         return;
     }
     const wxString id = descPendingId;
@@ -582,33 +831,43 @@ void MainWindow::fetchDescription()
                 announce(text);
         });
     if (!started)
-        descTimer.Start(400, wxTIMER_ONE_SHOT);
+    {
+        if (showRunner.lastLaunchFailed())
+        {
+            descBox[page]->SetValue(L"Description indisponible : winget est introuvable.");
+            descPendingId.clear();
+            descPendingPage = -1;
+        }
+        else
+            descTimer.Start(400, wxTIMER_ONE_SHOT);
+    }
 }
 
 // --- actions -----------------------------------------------------------------
 
-void MainWindow::runAction(const std::vector<wxString>& args, const wxString& announceStart)
+void MainWindow::runAction(const std::vector<wxString>& args, const wxString& announceStart,
+                           std::function<void(int exitCode)> then)
 {
     const bool started = runner.start(
         args,
         [this](const wxString& line) { log(line); },
-        [this](int exitCode, const wxString&)
+        [this, then](int exitCode, const wxString&)
         {
             actionInProgress = false;
             if (exitCode == 0)
-            {
                 log(L"Terminé.");
-                announce(L"Terminé");
-            }
             else
-            {
                 log(wxString::Format(L"Échec, code %d (0x%08X).", exitCode,
                                      static_cast<unsigned int>(exitCode)));
-                announce(wxString::Format(L"Échec, code %d", exitCode));
+            if (then)
+            {
+                then(exitCode);
+                return;
             }
+            announce(exitCode == 0 ? wxString(L"Terminé")
+                                   : wxString::Format(L"Échec, code %d", exitCode));
             // Refresh both stateful lists after any action.
-            refreshUpgradesAfterInstalled = true;
-            refreshInstalled();
+            startRefreshChain(false);
         });
 
     if (started)
@@ -618,7 +877,7 @@ void MainWindow::runAction(const std::vector<wxString>& args, const wxString& an
         announce(announceStart);
     }
     else
-        announce(kBusyMsg);
+        reportStartFailure();
 }
 
 void MainWindow::onRefresh()
@@ -626,6 +885,11 @@ void MainWindow::onRefresh()
     if (runner.isBusy())
     {
         announce(kBusyMsg);
+        return;
+    }
+    if (!wingetReady)
+    {
+        ensureWinget([this]() { startRefreshChain(true); });
         return;
     }
     switch (notebook->GetSelection())
@@ -645,6 +909,17 @@ void MainWindow::onUpgradeSelected()
         announce(L"Aucune sélection");
         return;
     }
+    if (runner.isBusy())
+    {
+        announce(kBusyMsg);
+        return;
+    }
+    // App Installer is winget itself: never upgraded through winget.
+    if (wingetsetup::isAppInstallerId(id))
+    {
+        updateAppInstaller([this](bool) { startRefreshChain(false); });
+        return;
+    }
     runAction({ "upgrade", "--id", id, "--exact", "--silent",
                 "--accept-source-agreements", "--accept-package-agreements",
                 "--disable-interactivity" },
@@ -658,15 +933,81 @@ void MainWindow::onUpgradeAll()
         announce(kBusyMsg);
         return;
     }
+    if (tableUpgrades.empty())
+    {
+        announce(L"Aucune mise à jour");
+        return;
+    }
     const int reply = wxMessageBox(
         wxString::Format(L"Mettre à jour les %zu paquets ?", tableUpgrades.rows.size()),
         L"Tout mettre à jour", wxYES_NO | wxICON_QUESTION, this);
     if (reply != wxYES)
         return;
-    runAction({ "upgrade", "--all", "--silent",
+
+    // One package at a time rather than `upgrade --all`: App Installer can be
+    // taken out and done first (through winget it would kill winget halfway
+    // through the whole batch), and each package is announced "N of M".
+    upgradeQueue.clear();
+    bool appInstaller = false;
+    const int idCol = tableUpgrades.columnIndex("ID");
+    for (const auto& row : tableUpgrades.rows)
+    {
+        if (idCol < 0 || static_cast<size_t>(idCol) >= row.size() || row[idCol].empty())
+            continue;
+        if (wingetsetup::isAppInstallerId(row[idCol]))
+            appInstaller = true;
+        else
+            upgradeQueue.push_back({ row[idCol], row.empty() ? row[idCol] : row[0] });
+    }
+    upgradeTotal = upgradeQueue.size() + (appInstaller ? 1 : 0);
+    upgradeDone = 0;
+    upgradeFailed = 0;
+
+    if (appInstaller)
+    {
+        updateAppInstaller([this](bool ok)
+        {
+            ++upgradeDone;
+            if (!ok)
+                ++upgradeFailed;
+            runNextQueuedUpgrade();
+        });
+    }
+    else
+        runNextQueuedUpgrade();
+}
+
+void MainWindow::runNextQueuedUpgrade()
+{
+    if (upgradeQueue.empty())
+    {
+        const wxString summary = upgradeFailed == 0
+            ? wxString::Format(L"Mises à jour terminées : %zu sur %zu.", upgradeDone, upgradeTotal)
+            : wxString::Format(L"Mises à jour terminées : %zu réussies, %zu échecs.",
+                               upgradeDone - upgradeFailed, upgradeFailed);
+        log(summary);
+        announce(summary);
+        startRefreshChain(false);
+        return;
+    }
+
+    const PendingUpgrade next = upgradeQueue.front();
+    upgradeQueue.pop_front();
+    runAction({ "upgrade", "--id", next.id, "--exact", "--silent",
                 "--accept-source-agreements", "--accept-package-agreements",
                 "--disable-interactivity" },
-              L"Mise à jour de tous les paquets…");
+              wxString::Format(L"Mise à jour %zu sur %zu : %s…",
+                               upgradeDone + 1, upgradeTotal, next.name),
+              [this, name = next.name](int exitCode)
+              {
+                  ++upgradeDone;
+                  if (exitCode != 0)
+                  {
+                      ++upgradeFailed;
+                      announce(wxString::Format(L"Échec : %s", name));
+                  }
+                  runNextQueuedUpgrade();
+              });
 }
 
 void MainWindow::onInstallSelected()
@@ -696,6 +1037,13 @@ void MainWindow::onUninstallSelected()
     if (id.empty())
     {
         announce(L"Aucune sélection");
+        return;
+    }
+    if (wingetsetup::isAppInstallerId(id))
+    {
+        log(L"Le Programme d'installation d'application contient winget : le désinstaller "
+            L"rendrait WingetAccess inutilisable. Désinstallation refusée.");
+        announce(L"Désinstallation de winget refusée");
         return;
     }
     const int reply = wxMessageBox(
@@ -784,8 +1132,11 @@ void MainWindow::onHelpKeys()
         L"Ctrl+I : installer la sélection\n"
         L"Suppr : désinstaller la sélection (avec confirmation)\n"
         "Ctrl+Maj+C : copier l'identifiant du paquet\n"
-        "F5 : actualiser l'onglet courant\n"
-        L"Le journal en bas de la fenêtre garde la sortie complète de winget.",
+        L"F5 : actualiser l'onglet courant (ou relancer la préparation de winget)\n"
+        L"Le journal en bas de la fenêtre garde la sortie complète de winget.\n"
+        L"Au démarrage, WingetAccess prépare winget tout seul : il l'installe ou le répare "
+        L"s'il manque, accepte les conditions des sources et le met à jour en premier "
+        L"quand une nouvelle version existe.",
         "Raccourcis clavier", wxOK | wxICON_INFORMATION, this);
 }
 

@@ -1,6 +1,7 @@
 #include "WingetRunner.h"
 
 #include <wx/app.h>
+#include <wx/utils.h>
 #include <windows.h>
 #include <string>
 #include <thread>
@@ -65,16 +66,48 @@ void WingetRunner::terminate()
         TerminateProcess(h, 1);
 }
 
+wxString WingetRunner::wingetPath()
+{
+    wxString localAppData;
+    if (wxGetEnv("LOCALAPPDATA", &localAppData))
+    {
+        const wxString alias = localAppData + L"\\Microsoft\\WindowsApps\\winget.exe";
+        // The alias is a reparse point: GetFileAttributes sees it, while
+        // wxFileExists (which opens the target) can miss it.
+        if (GetFileAttributesW(alias.wc_str()) != INVALID_FILE_ATTRIBUTES)
+            return alias;
+    }
+    return "winget";
+}
+
 bool WingetRunner::start(const std::vector<wxString>& args,
                          LineCallback onLine,
                          DoneCallback onDone)
 {
+    return launch(wingetPath(), args, "Y\r\nY\r\nY\r\n", onLine, onDone);
+}
+
+bool WingetRunner::startProgram(const wxString& program,
+                                const std::vector<wxString>& args,
+                                LineCallback onLine,
+                                DoneCallback onDone)
+{
+    return launch(program, args, std::string(), onLine, onDone);
+}
+
+bool WingetRunner::launch(const wxString& program,
+                          const std::vector<wxString>& args,
+                          const std::string& stdinText,
+                          LineCallback onLine,
+                          DoneCallback onDone)
+{
+    launchFailed = false;
     bool expected = false;
     if (!busy.compare_exchange_strong(expected, true))
         return false;
 
-    // Build the command line: winget <args...>
-    std::wstring cmd = L"winget";
+    // Build the command line: <program> <args...>
+    std::wstring cmd = quoteArg(program);
     for (const wxString& a : args)
     {
         cmd += L' ';
@@ -96,12 +129,33 @@ bool WingetRunner::start(const std::vector<wxString>& args,
     }
     SetHandleInformation(readEnd, HANDLE_FLAG_INHERIT, 0);
 
+    // Standard input: a pipe holding `stdinText`, write end closed so the
+    // child reads the prepared answers then end-of-file (never blocks).
+    HANDLE inRead = nullptr, inWrite = nullptr;
+    if (!CreatePipe(&inRead, &inWrite, &sa, 0))
+    {
+        CloseHandle(readEnd);
+        CloseHandle(writeEnd);
+        busy.store(false);
+        if (onLine)
+            onLine(L"Erreur interne : CreatePipe a échoué.");
+        return false;
+    }
+    SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0);
+    if (!stdinText.empty())
+    {
+        DWORD written = 0;
+        WriteFile(inWrite, stdinText.data(), static_cast<DWORD>(stdinText.size()),
+                  &written, nullptr);
+    }
+    CloseHandle(inWrite);
+
     STARTUPINFOW si {};
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdOutput = writeEnd;
     si.hStdError  = writeEnd;
-    si.hStdInput  = INVALID_HANDLE_VALUE;
+    si.hStdInput  = inRead;
 
     PROCESS_INFORMATION pi {};
     std::wstring mutableCmd = cmd;  // CreateProcessW may modify the buffer
@@ -109,13 +163,13 @@ bool WingetRunner::start(const std::vector<wxString>& args,
                                    TRUE, CREATE_NO_WINDOW, nullptr, nullptr,
                                    &si, &pi);
     CloseHandle(writeEnd);
+    CloseHandle(inRead);
 
     if (!ok)
     {
         CloseHandle(readEnd);
+        launchFailed = true;
         busy.store(false);
-        if (onLine)
-            onLine(L"Impossible de lancer winget. Vérifie que winget est installé (App Installer).");
         return false;
     }
 
