@@ -8,7 +8,13 @@ bool App::OnInit()
     if (!wxApp::OnInit())
         return false;
 
-    auto* window = new MainWindow();
+    // --updated: started by the previous version right after a self-update.
+    bool justUpdated = false;
+    for (int i = 1; i < argc; ++i)
+        if (argv[i] == "--updated")
+            justUpdated = true;
+
+    auto* window = new MainWindow(justUpdated);
     window->Show(true);
     return true;
 }

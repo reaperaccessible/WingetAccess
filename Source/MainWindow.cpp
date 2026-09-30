@@ -8,9 +8,12 @@
 #include <wx/clipbrd.h>
 #include <wx/stattext.h>
 #include <wx/tokenzr.h>
+#include <wx/weakref.h>
+#include <wx/app.h>
 
 #include <algorithm>
 #include <functional>
+#include <thread>
 
 #define NOMINMAX
 #include <windows.h>
@@ -91,12 +94,15 @@ enum Ids
     ID_SEARCH_GO,
     ID_DESC_TIMER,
     ID_DELAY_TIMER,
+    ID_CHECK_UPDATE,
+    ID_SELFUPDATE_TIMER,
+    ID_ANNOUNCE_TIMER,
 };
 
 const wxString kBusyMsg = L"Occupé, opération en cours";
 } // namespace
 
-MainWindow::MainWindow()
+MainWindow::MainWindow(bool justUpdated)
     : wxFrame(nullptr, wxID_ANY,
               wxString::Format("WingetAccess %s", WINGETACCESS_VERSION_STR),
               wxDefaultPosition, wxSize(1000, 700))
@@ -124,6 +130,7 @@ MainWindow::MainWindow()
 
     auto* menuHelp = new wxMenu();
     menuHelp->Append(ID_HELP_KEYS, "Raccourcis clavier\tCtrl+H");
+    menuHelp->Append(ID_CHECK_UPDATE, L"Rechercher une mise à jour de WingetAccess");
     menuHelp->Append(wxID_ABOUT, L"À propos");
 
     auto* bar = new wxMenuBar();
@@ -297,7 +304,23 @@ MainWindow::MainWindow()
     // focus sits in a list or text control; route them with a CHAR_HOOK.
     Bind(wxEVT_CHAR_HOOK, &MainWindow::onCharHook, this);
 
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { checkSelfUpdate(true); }, ID_CHECK_UPDATE);
+    selfUpdateTimer.SetOwner(this, ID_SELFUPDATE_TIMER);
+    Bind(wxEVT_TIMER, [this](wxTimerEvent&) { onSelfUpdateTimer(); }, ID_SELFUPDATE_TIMER);
+    announceTimer.SetOwner(this, ID_ANNOUNCE_TIMER);
+    Bind(wxEVT_TIMER, [this](wxTimerEvent&) { announce(delayedAnnouncement); }, ID_ANNOUNCE_TIMER);
+
     log(wxString::Format(L"WingetAccess %s.", WINGETACCESS_VERSION_STR));
+    if (justUpdated)
+    {
+        // Spoken once the window and its first focus have been read.
+        delayedAnnouncement = wxString::Format(L"WingetAccess mis à jour, version %s",
+                                               WINGETACCESS_VERSION_STR);
+        log(delayedAnnouncement + ".");
+        announceTimer.Start(1500, wxTIMER_ONE_SHOT);
+    }
+    selfupdate::cleanupOldCopy();
+    checkSelfUpdate(false);
     ensureWinget([this]() { startRefreshChain(true); });
 }
 
@@ -655,6 +678,139 @@ void MainWindow::reportStartFailure()
     }
     else
         announce(kBusyMsg);
+}
+
+// --- self-update -------------------------------------------------------------
+
+bool MainWindow::wingetIdle() const
+{
+    return !runner.isBusy() && !actionInProgress && !maintenance && upgradeQueue.empty();
+}
+
+void MainWindow::checkSelfUpdate(bool manual)
+{
+    if (selfUpdating || selfUpdatePending)
+    {
+        if (manual)
+            announce(L"Mise à jour de WingetAccess déjà en cours");
+        return;
+    }
+    if (manual)
+    {
+        log(L"Recherche d'une mise à jour de WingetAccess…");
+        announce(L"Recherche d'une mise à jour…");
+    }
+    wxWeakRef<MainWindow> self(this);
+    std::thread([self, manual]()
+    {
+        const selfupdate::Release r = selfupdate::fetchLatest();
+        if (wxTheApp != nullptr)
+            wxTheApp->CallAfter([self, r, manual]()
+            {
+                if (self)
+                    self->onSelfUpdateInfo(r, manual);
+            });
+    }).detach();
+}
+
+void MainWindow::onSelfUpdateInfo(const selfupdate::Release& r, bool manual)
+{
+    if (!r.ok)
+    {
+        log(wxString::Format(L"Vérification de la mise à jour de WingetAccess impossible : %s.",
+                             r.error));
+        if (manual)
+            announce(L"Vérification impossible, voir le journal");
+        return;
+    }
+    if (!selfupdate::isNewer(r))
+    {
+        if (manual)
+        {
+            const wxString msg = wxString::Format(L"WingetAccess est à jour, version %s",
+                                                  WINGETACCESS_VERSION_STR);
+            log(msg + ".");
+            announce(msg);
+        }
+        return;
+    }
+
+    log(wxString::Format(L"Nouvelle version de WingetAccess disponible : %s.", r.tag));
+    pendingRelease = r;
+    selfUpdatePending = true;
+    if (wingetIdle())
+        applySelfUpdate();
+    else
+    {
+        log(L"Elle sera installée dès la fin de l'opération en cours.");
+        selfUpdateTimer.Start(2000);
+    }
+}
+
+void MainWindow::applySelfUpdate()
+{
+    selfUpdatePending = false;
+    selfUpdating = true;
+    const wxString msg = wxString::Format(L"Mise à jour de WingetAccess vers la version %s…",
+                                          pendingRelease.tag);
+    log(msg);
+    announce(msg);
+
+    wxWeakRef<MainWindow> self(this);
+    const selfupdate::Release r = pendingRelease;
+    std::thread([self, r]()
+    {
+        wxString error;
+        const wxString file = selfupdate::download(r, error);
+        if (wxTheApp != nullptr)
+            wxTheApp->CallAfter([self, file, error]()
+            {
+                if (!self)
+                    return;
+                if (file.empty())
+                {
+                    self->selfUpdating = false;
+                    self->log(wxString::Format(L"Échec de la mise à jour de WingetAccess : %s.",
+                                               error));
+                    self->announce(L"Échec de la mise à jour de WingetAccess");
+                    return;
+                }
+                self->readyFile = file;
+                // An action may have been started during the download.
+                if (self->wingetIdle())
+                    self->swapAndRestart();
+                else
+                    self->selfUpdateTimer.Start(2000);
+            });
+    }).detach();
+}
+
+void MainWindow::swapAndRestart()
+{
+    selfUpdateTimer.Stop();
+    showRunner.terminate();
+    wxString error;
+    if (!selfupdate::installAndRestart(readyFile, error))
+    {
+        selfUpdating = false;
+        readyFile.clear();
+        log(wxString::Format(L"Échec de la mise à jour de WingetAccess : %s.", error));
+        announce(L"Échec de la mise à jour de WingetAccess");
+        return;
+    }
+    log(L"Redémarrage de WingetAccess…");
+    Close(true);
+}
+
+void MainWindow::onSelfUpdateTimer()
+{
+    if (!wingetIdle())
+        return;
+    selfUpdateTimer.Stop();
+    if (selfUpdatePending)
+        applySelfUpdate();
+    else if (!readyFile.empty())
+        swapAndRestart();
 }
 
 // --- refreshes ---------------------------------------------------------------
@@ -1136,7 +1292,10 @@ void MainWindow::onHelpKeys()
         L"Le journal en bas de la fenêtre garde la sortie complète de winget.\n"
         L"Au démarrage, WingetAccess prépare winget tout seul : il l'installe ou le répare "
         L"s'il manque, accepte les conditions des sources et le met à jour en premier "
-        L"quand une nouvelle version existe.",
+        L"quand une nouvelle version existe.\n"
+        L"WingetAccess se met aussi à jour tout seul depuis GitHub, au démarrage, dès "
+        L"qu'aucune opération n'est en cours (menu Aide : Rechercher une mise à jour "
+        L"de WingetAccess).",
         "Raccourcis clavier", wxOK | wxICON_INFORMATION, this);
 }
 

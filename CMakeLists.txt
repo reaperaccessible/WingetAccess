@@ -21,13 +21,20 @@ add_executable(WingetAccess WIN32
     Source/WingetRunner.cpp
     Source/WingetParser.cpp
     Source/WingetSetup.cpp
+    Source/SelfUpdate.cpp
     Source/WingetAccess.rc     # manifest (asInvoker/DPI) + version info
 )
+
+# Header-only JSON for the GitHub releases API (self-update).
+find_package(nlohmann_json CONFIG REQUIRED)
 
 target_include_directories(WingetAccess PRIVATE Source)
 
 target_link_libraries(WingetAccess PRIVATE
     ${wxWidgets_LIBRARIES}
+    nlohmann_json::nlohmann_json
+    winhttp           # self-update download
+    bcrypt            # SHA-256 of the downloaded exe
     user32
     oleaut32          # SysAllocString / SysFreeString (UIA notification text)
     uiautomationcore  # UiaRaiseNotificationEvent (screen-reader announcements)

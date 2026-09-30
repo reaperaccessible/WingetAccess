@@ -13,11 +13,13 @@
 #include "WingetRunner.h"
 #include "WingetParser.h"
 #include "WingetSetup.h"
+#include "SelfUpdate.h"
 
 class MainWindow : public wxFrame
 {
 public:
-    MainWindow();
+    // `justUpdated`: started by the previous version after a self-update.
+    explicit MainWindow(bool justUpdated = false);
     ~MainWindow() override;
 
 protected:
@@ -72,6 +74,22 @@ private:
 
     // "Upgrade all" runs one package at a time: App Installer first (outside
     // winget), then each listed package, with a spoken "N of M".
+    // --- self-update (GitHub releases) ---------------------------------------
+    // Checked quietly at startup and on demand; the swap only happens while no
+    // winget operation runs, so an install is never cut short.
+    selfupdate::Release pendingRelease;
+    bool     selfUpdatePending = false;   // newer release known, not yet downloaded
+    bool     selfUpdating = false;        // download or swap in progress
+    wxString readyFile;                   // verified new exe waiting for the swap
+    wxTimer  selfUpdateTimer;             // waits for winget to be idle
+    wxTimer  announceTimer;               // spoken "updated" message at startup
+    wxString delayedAnnouncement;
+    bool wingetIdle() const;
+    void checkSelfUpdate(bool manual);
+    void onSelfUpdateInfo(const selfupdate::Release& r, bool manual);
+    void applySelfUpdate();
+    void swapAndRestart();
+
     struct PendingUpgrade { wxString id; wxString name; };
     std::deque<PendingUpgrade> upgradeQueue;
     size_t upgradeTotal = 0, upgradeDone = 0, upgradeFailed = 0;
@@ -116,4 +134,5 @@ private:
     void onCopyId();
     void onHelpKeys();
     void onAbout();
+    void onSelfUpdateTimer();
 };

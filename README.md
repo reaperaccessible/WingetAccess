@@ -37,6 +37,11 @@ naturellement.
   installe le Programme d'installation d'application ; il accepte les
   conditions des sources ; et quand une nouvelle version de winget existe, il
   l'installe en premier, avant tout le reste.
+- **Mises à jour automatiques** — au démarrage, WingetAccess regarde s'il
+  existe une nouvelle version sur GitHub. Si oui, il la télécharge, vérifie son
+  empreinte, prend sa place et redémarre tout seul, sans jamais interrompre
+  une installation en cours. Menu Aide : « Rechercher une mise à jour de
+  WingetAccess » pour vérifier à la demande.
 
 ### Raccourcis
 
@@ -95,6 +100,10 @@ JAWS and Narrator read everything out of the box.
   it on its own: on a freshly installed machine it registers, repairs or
   installs App Installer; it accepts the source agreements; and when a newer
   winget exists, it installs it first, before anything else.
+- **Automatic updates** — at startup, WingetAccess checks GitHub for a newer
+  version; if there is one, it downloads it, verifies its hash, takes its place
+  and restarts on its own, never cutting an install short. Help menu: "Check
+  for a WingetAccess update" to check on demand.
 
 ### Requirements
 
