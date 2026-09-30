@@ -132,6 +132,14 @@ Table parseFirstTable(const wxString& output)
         table.headers.push_back(sliceByWidth(header, from, to));
     }
 
+    // A real package always has an ID and a version (list, upgrade, search).
+    // winget prints a summary right under the table, with no blank line in
+    // between (« 2 mises à niveau disponibles. »): sliced into the columns it
+    // would become a bogus row with an empty version, so such a row ends the
+    // table.
+    const int idCol = table.columnIndex("ID");
+    const int versionCol = table.columnIndex("Version");
+
     // Data rows run from the separator to the first empty line.
     for (size_t i = sep + 1; i < lines.size(); ++i)
     {
@@ -149,6 +157,8 @@ Table parseFirstTable(const wxString& output)
             const int to   = (k + 1 < starts.size()) ? starts[k + 1] : -1;
             row.push_back(sliceByWidth(lines[i], from, to));
         }
+        if ((idCol >= 0 && row[idCol].empty()) || (versionCol >= 0 && row[versionCol].empty()))
+            break;
         table.rows.push_back(std::move(row));
     }
 
