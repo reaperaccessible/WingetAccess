@@ -1,8 +1,16 @@
 #include <winres.h>
 #include "Version.h"
 
+#include "HelpResources.h"
+
 // Application manifest (asInvoker, per-monitor DPI, comctl v6).
 1 RT_MANIFEST "WingetAccess.manifest"
+
+// Manual (F1) and changelog (Ctrl+F1), carried inside the portable exe.
+IDR_MANUAL_EN    RCDATA "../help/Manual_en.html"
+IDR_MANUAL_FR    RCDATA "../help/Manual_fr.html"
+IDR_CHANGELOG_EN RCDATA "../help/Changelog_en.html"
+IDR_CHANGELOG_FR RCDATA "../help/Changelog_fr.html"
 
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION WINGETACCESS_VERSION_RC

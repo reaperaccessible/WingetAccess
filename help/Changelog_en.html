@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changelog — WingetAccess</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; max-width: 800px; margin: 1.5em auto; padding: 0 1em; line-height: 1.5; }
+  h1 { font-size: 1.5em; }
+  h2 { font-size: 1.15em; margin-top: 1.4em; border-bottom: 1px solid #ccc; padding-bottom: .2em; }
+  ul { margin-top: .3em; }
+</style>
+</head>
+<body>
+<h1>Changelog</h1>
+<p>WingetAccess. The most recent versions are at the top.</p>
+
+<h2>Version 1.06</h2>
+<ul>
+<li>New: the <strong>manual</strong> opens with <strong>F1</strong> and this <strong>changelog</strong> with <strong>Ctrl+F1</strong>, in the interface language. They are built into the WingetAccess.exe file: nothing more to keep next to it, and they follow every update.</li>
+<li>The help key becomes <strong>Ctrl+Shift+H</strong>, as in every product of the family (Ctrl+H before). It now opens a list of the shortcuts to browse with the arrows; Escape closes it and takes you back where you were.</li>
+<li>Accessibility: no more silent list edges. Up on the first row announces "First," followed by the row; Down on the last row announces "Last,".</li>
+</ul>
+
+<h2>Version 1.05</h2>
+<ul>
+<li>At the end of the startup check, WingetAccess announces "7 updates available" (or "1 update available", "No updates available") instead of "7 updates".</li>
+</ul>
+
+<h2>Version 1.04</h2>
+<ul>
+<li>At startup, WingetAccess announces "Please wait while WingetAccess checks for available updates."</li>
+</ul>
+
+<h2>Version 1.03</h2>
+<ul>
+<li>New: the <strong>progress</strong> is announced during an install or an update: "Downloading 35%", in 5% steps, then "Installing…" when the installer starts. An uninstall announces "Uninstalling…".</li>
+<li>Fix: the log now shows everything Winget says during an install, an update or an uninstall. These lines were missing.</li>
+</ul>
+
+<h2>Version 1.02</h2>
+<ul>
+<li>New: WingetAccess speaks <strong>English and French</strong>. The interface follows the Windows language at startup.</li>
+<li>Fix: on a French Windows, a program's description (Tab from a list) is complete again: version, publisher, author, description and license.</li>
+<li>Descriptions written on several lines are now read in full.</li>
+</ul>
+
+<h2>Version 1.01</h2>
+<ul>
+<li>New: WingetAccess <strong>prepares Winget on its own</strong>. On a new computer or when Winget was never used, it activates, repairs or installs it as needed, and accepts the source agreements. No more typing Y in a console.</li>
+<li>When a newer Winget exists, it is installed first, automatically.</li>
+<li>"Update all" processes programs one at a time and announces each one, for example "Update 3 of 8: Firefox…", then gives the summary.</li>
+<li>New: WingetAccess <strong>updates itself</strong> at startup (Help menu: "Check for a WingetAccess update").</li>
+<li>App Installer, which contains Winget, can no longer be uninstalled by mistake from WingetAccess.</li>
+</ul>
+
+<h2>Version 1.00</h2>
+<ul>
+<li>First version: three tabs (Installed, Updates, Search), opened with Ctrl+1, Ctrl+2 and Ctrl+3, whose name is announced.</li>
+<li>Enter updates or installs the chosen program, Ctrl+Shift+U updates everything, Delete uninstalls, without ever typing a command.</li>
+<li>A Description box in every tab, read with Tab from the list.</li>
+<li>The Installed tab only shows the programs Winget can manage.</li>
+<li>When two versions of the same program are installed, the version of the chosen row is the one uninstalled.</li>
+<li>Portable program: a single file, nothing to install.</li>
+</ul>
+</body>
+</html>

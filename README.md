@@ -55,7 +55,7 @@ naturellement.
 - Ctrl+I : installer la sélection
 - Suppr : désinstaller la sélection (avec confirmation)
 - Ctrl+Maj+C : copier l'identifiant du paquet
-- F5 : actualiser l'onglet courant ; Ctrl+H : rappel des raccourcis
+- F5 : actualiser l'onglet courant ; Ctrl+Maj+H : liste des raccourcis ; F1 : manuel ; Ctrl+F1 : journal des modifications
 
 ### Prérequis
 

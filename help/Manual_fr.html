@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manuel — WingetAccess</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; max-width: 820px; margin: 1.5em auto; padding: 0 1em; line-height: 1.55; }
+  h1 { font-size: 1.6em; }
+  h2 { font-size: 1.25em; margin-top: 1.6em; border-bottom: 1px solid #ccc; padding-bottom: .2em; }
+  ul { margin-top: .3em; }
+  kbd { background:#eee; border:1px solid #bbb; border-radius:3px; padding:0 .35em; font-family:inherit; }
+</style>
+</head>
+<body>
+<h1>WingetAccess — Manuel</h1>
+
+<p>WingetAccess vous permet d'<strong>installer, mettre à jour et désinstaller vos logiciels Windows</strong> sans jamais taper une commande, avec votre lecteur d'écran (NVDA, JAWS ou le Narrateur). Il s'appuie sur Winget, le gestionnaire de logiciels intégré à Windows : vous n'avez plus besoin de copier le nom d'un programme pour écrire « winget install » ou « winget upgrade » à la main.</p>
+<p>WingetAccess est un programme <strong>portable</strong> : un seul fichier, <code>WingetAccess.exe</code>, à placer où vous voulez. Il n'y a rien à installer, et il se met à jour lui-même.</p>
+
+<h2>Sommaire</h2>
+<ul>
+<li>Au démarrage</li>
+<li>La fenêtre</li>
+<li>Se déplacer</li>
+<li>Installer un logiciel</li>
+<li>Mettre à jour vos logiciels</li>
+<li>Désinstaller un logiciel</li>
+<li>La description d'un logiciel</li>
+<li>Ce que vous entendez pendant une opération</li>
+<li>Le journal</li>
+<li>Les autorisations de Windows</li>
+<li>Les mises à jour de WingetAccess</li>
+<li>Langue</li>
+<li>Raccourcis clavier</li>
+<li>En cas de problème</li>
+</ul>
+
+<h2>Au démarrage</h2>
+<p>À l'ouverture, vous entendez « Veuillez patienter pendant que WingetAccess vérifie si des mises à jour sont disponibles. » WingetAccess vérifie alors Winget, charge vos logiciels installés puis les mises à jour disponibles. Quand c'est terminé, il annonce le nombre trouvé, par exemple « 7 mises à jour disponibles ».</p>
+<p>WingetAccess <strong>prépare Winget tout seul</strong>. Sur un ordinateur neuf, ou si Winget n'a jamais servi, il l'active, le répare ou l'installe au besoin, et accepte pour vous les conditions d'utilisation des sources de logiciels. Vous n'avez jamais à taper « Y » dans une console. Si une nouvelle version de Winget existe, il l'installe en premier, avant tout le reste.</p>
+<p>Si Winget ne peut vraiment pas être préparé (par exemple sans connexion Internet), une boîte de dialogue vous l'explique. Vérifiez la connexion, puis appuyez sur <kbd>F5</kbd> pour réessayer.</p>
+
+<h2>La fenêtre</h2>
+<p>La fenêtre a trois onglets :</p>
+<ul>
+<li><strong>Installés</strong> : les logiciels de votre ordinateur que Winget sait gérer, avec leur nom, leur identifiant, leur version et, s'il y en a une, la version disponible. Les programmes que Winget voit mais ne sait pas gérer n'y figurent pas.</li>
+<li><strong>Mises à jour</strong> : seulement les logiciels qui ont une version plus récente.</li>
+<li><strong>Recherche</strong> : un champ pour chercher un logiciel, le bouton « Lancer la recherche » et la liste des résultats.</li>
+</ul>
+<p>Dans chaque onglet, une zone <strong>Description</strong> suit la liste. En bas de la fenêtre, le <strong>Journal</strong> garde le détail de tout ce qui s'est passé.</p>
+
+<h2>Se déplacer</h2>
+<ul>
+<li><kbd>Ctrl+1</kbd>, <kbd>Ctrl+2</kbd> et <kbd>Ctrl+3</kbd> ouvrent les onglets Installés, Mises à jour et Recherche. Le nom de l'onglet est annoncé, puis la ligne sélectionnée. Pour la Recherche, le curseur va directement dans le champ.</li>
+<li>Dans une liste, les flèches haut et bas passent d'un logiciel à l'autre. Au bord de la liste, rien n'est jamais muet : flèche haut sur la première ligne annonce « Premier, » suivi de la ligne, et flèche bas sur la dernière annonce « Dernier, ».</li>
+<li><kbd>Tab</kbd> et <kbd>Maj+Tab</kbd> passent d'une zone à l'autre : liste, description, journal.</li>
+</ul>
+
+<h2>Installer un logiciel</h2>
+<ul>
+<li>Appuyez sur <kbd>Ctrl+3</kbd>, tapez un mot (« audacity », « 7zip »…), puis <kbd>Entrée</kbd>.</li>
+<li>Le nombre de résultats est annoncé et le curseur passe dans la liste.</li>
+<li>Choisissez un résultat avec les flèches, puis appuyez sur <kbd>Entrée</kbd> (ou <kbd>Ctrl+I</kbd>). L'installation se fait sans fenêtre, en acceptant pour vous les licences.</li>
+</ul>
+
+<h2>Mettre à jour vos logiciels</h2>
+<ul>
+<li>Dans l'onglet Mises à jour (<kbd>Ctrl+2</kbd>), choisissez un logiciel puis appuyez sur <kbd>Entrée</kbd> (ou <kbd>Ctrl+U</kbd>).</li>
+<li><kbd>Ctrl+Maj+U</kbd> met <strong>tout</strong> à jour, après confirmation. Les logiciels sont traités un par un et chacun est annoncé, par exemple « Mise à jour 3 sur 8 : Firefox… ». À la fin, vous entendez le bilan : le nombre de réussites et d'échecs.</li>
+<li>Dans l'onglet Installés, <kbd>Entrée</kbd> tente aussi la mise à jour du logiciel choisi. S'il n'y en a pas, Winget répond simplement qu'il n'y a rien à faire.</li>
+</ul>
+<p>Après chaque opération, les onglets Installés et Mises à jour se mettent à jour tout seuls.</p>
+
+<h2>Désinstaller un logiciel</h2>
+<ul>
+<li>Dans l'onglet Installés ou Mises à jour, choisissez le logiciel puis appuyez sur <kbd>Suppr</kbd>.</li>
+<li>Répondez « Oui » à la question « Désinstaller … ? ».</li>
+<li>Si deux versions d'un même logiciel sont installées sous le même identifiant, c'est bien la version de la ligne choisie qui est désinstallée.</li>
+<li>Le Programme d'installation d'application, qui contient Winget, ne peut pas être désinstallé depuis WingetAccess : sans lui, WingetAccess ne pourrait plus rien faire.</li>
+</ul>
+
+<h2>La description d'un logiciel</h2>
+<p>Depuis une liste, appuyez sur <kbd>Tab</kbd> : la zone Description lit la fiche du logiciel sélectionné, avec sa version, son éditeur, son auteur, sa description, sa page d'accueil et sa licence. Elle se charge en arrière-plan quand vous vous arrêtez sur une ligne. Si vous arrivez avant la fin du chargement, vous entendez « Chargement de la description… », puis la fiche est lue dès qu'elle est prête. Les descriptions viennent des éditeurs des logiciels : elles sont souvent en anglais.</p>
+
+<h2>Ce que vous entendez pendant une opération</h2>
+<ul>
+<li>Au départ : « Installation de … », « Mise à jour de … » ou « Désinstallation de … ».</li>
+<li>Pendant le téléchargement : la progression, par paliers de 5 %, par exemple « Téléchargement 35 % ». Sur une connexion très rapide, certains paliers peuvent être sautés.</li>
+<li>Quand le programme d'installation démarre : « Installation en cours… » (ou « Désinstallation en cours… »). Cette étape n'a pas de pourcentage, car les programmes d'installation silencieux n'en donnent pas.</li>
+<li>À la fin : « Terminé », ou « Échec » suivi d'un code. Le détail est dans le journal.</li>
+</ul>
+<p>Une seule opération se fait à la fois. Si vous en demandez une autre pendant qu'elle tourne, vous entendez « Occupé, opération en cours ».</p>
+
+<h2>Le journal</h2>
+<p>La zone Journal, en bas de la fenêtre, est en lecture seule. Elle garde tout ce qu'a dit Winget pendant la séance : lignes d'installation, erreurs, préparation de Winget. Quand une opération échoue, c'est là que se trouve la raison exacte.</p>
+
+<h2>Les autorisations de Windows</h2>
+<p>WingetAccess se lance sans droits d'administrateur. Quand un logiciel en a besoin pour s'installer, c'est Windows qui affiche la demande d'autorisation (UAC), au bon moment. Répondez « Oui » pour continuer.</p>
+
+<h2>Les mises à jour de WingetAccess</h2>
+<p>À chaque démarrage, WingetAccess vérifie s'il existe une nouvelle version de lui-même. Si oui, il la télécharge, vérifie qu'elle est intacte, prend sa place et redémarre tout seul. Vous entendez alors « WingetAccess mis à jour, version … ». Il attend toujours la fin d'une opération en cours : une installation n'est jamais interrompue.</p>
+<p>Pour vérifier à la demande : menu Aide, « Rechercher une mise à jour de WingetAccess ».</p>
+
+<h2>Langue</h2>
+<p>WingetAccess suit la langue de Windows au démarrage : tout Windows en français, y compris canadien, donne le français ; les autres, l'anglais. Les textes qui viennent de Winget (colonnes, descriptions, lignes du journal) sont écrits par Winget dans la langue de Windows.</p>
+<p>Pour forcer une langue, lancez <code>WingetAccess.exe --lang=fr</code> ou <code>WingetAccess.exe --lang=en</code>, par exemple depuis un raccourci.</p>
+
+<h2>Raccourcis clavier</h2>
+<p><kbd>Ctrl+Maj+H</kbd> ouvre la liste de tous les raccourcis, à parcourir avec les flèches haut et bas ; <kbd>Échap</kbd> la referme et vous ramène où vous étiez. La voici :</p>
+<ul>
+<li><kbd>Ctrl+1</kbd> : onglet Installés</li>
+<li><kbd>Ctrl+2</kbd> : onglet Mises à jour</li>
+<li><kbd>Ctrl+3</kbd> : onglet Recherche (le curseur va au champ)</li>
+<li><kbd>Entrée</kbd> dans une liste : mettre à jour (Installés, Mises à jour) ou installer (Recherche)</li>
+<li><kbd>Tab</kbd> depuis une liste : description du logiciel sélectionné</li>
+<li><kbd>Ctrl+U</kbd> : mettre à jour la sélection</li>
+<li><kbd>Ctrl+Maj+U</kbd> : tout mettre à jour</li>
+<li><kbd>Ctrl+I</kbd> : installer la sélection</li>
+<li><kbd>Suppr</kbd> : désinstaller la sélection (avec confirmation)</li>
+<li><kbd>Ctrl+Maj+C</kbd> : copier l'identifiant du logiciel</li>
+<li><kbd>F5</kbd> : actualiser l'onglet courant (ou relancer la préparation de Winget)</li>
+<li><kbd>F1</kbd> : manuel</li>
+<li><kbd>Ctrl+F1</kbd> : journal des modifications</li>
+<li><kbd>Ctrl+Maj+H</kbd> : cette liste des raccourcis</li>
+<li><kbd>Alt+F4</kbd> : quitter</li>
+</ul>
+<p>Deux lettres de raccourci en plus : <kbd>Alt+R</kbd> va au champ de recherche (dans l'onglet Recherche) et <kbd>Alt+J</kbd> va au journal.</p>
+
+<h2>En cas de problème</h2>
+<ul>
+<li><strong>Une opération échoue</strong> : lisez les dernières lignes du journal, qui donnent la raison de Winget.</li>
+<li><strong>« winget introuvable »</strong> : vérifiez la connexion Internet puis appuyez sur <kbd>F5</kbd>. Vous pouvez aussi installer « Programme d'installation d'application » depuis le Microsoft Store, puis appuyer sur <kbd>F5</kbd>.</li>
+<li><strong>« Occupé, opération en cours »</strong> : attendez la fin de l'opération en cours, annoncée par « Terminé » ou « Échec ».</li>
+<li><strong>Un logiciel n'apparaît pas dans Installés</strong> : Winget ne sait pas le gérer (il n'est pas dans ses sources). Cherchez-le dans l'onglet Recherche.</li>
+</ul>
+
+<p>WingetAccess est un logiciel libre et gratuit de ReaperAccessible (licence GPL-3.0).</p>
+</body>
+</html>

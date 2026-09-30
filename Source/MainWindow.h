@@ -14,6 +14,7 @@
 #include "WingetParser.h"
 #include "WingetSetup.h"
 #include "SelfUpdate.h"
+#include "UiaAnnouncer.h"
 
 class MainWindow : public wxFrame
 {
@@ -33,7 +34,7 @@ private:
     // Progress: raised as "most recent" of one activity, so a screen reader
     // may drop a stale percentage instead of queueing it.
     void announceProgress(const wxString& text);
-    void* uiaProvider_ = nullptr;
+    UiaAnnouncer announcer;
 
     // --- action progress (install / upgrade / uninstall) ---------------------
     // winget reports a percentage while it downloads (OSC 9;4 in a pseudo
@@ -150,6 +151,7 @@ private:
     void onUninstallSelected();
     void onCopyId();
     void onHelpKeys();
+    void openHelpDocument(int resourceId, const wxString& fileName);
     void onAbout();
     void onSelfUpdateTimer();
 };

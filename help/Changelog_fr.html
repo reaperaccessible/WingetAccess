@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Journal des modifications — WingetAccess</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; max-width: 800px; margin: 1.5em auto; padding: 0 1em; line-height: 1.5; }
+  h1 { font-size: 1.5em; }
+  h2 { font-size: 1.15em; margin-top: 1.4em; border-bottom: 1px solid #ccc; padding-bottom: .2em; }
+  ul { margin-top: .3em; }
+</style>
+</head>
+<body>
+<h1>Journal des modifications</h1>
+<p>WingetAccess. Les versions les plus récentes sont en haut.</p>
+
+<h2>Version 1.06</h2>
+<ul>
+<li>Nouveau : le <strong>manuel</strong> s'ouvre avec <strong>F1</strong> et ce <strong>journal des modifications</strong> avec <strong>Ctrl+F1</strong>, dans la langue de l'interface. Ils sont intégrés au fichier WingetAccess.exe : rien de plus à garder à côté, et ils suivent chaque mise à jour.</li>
+<li>La touche d'aide devient <strong>Ctrl+Maj+H</strong>, comme dans tous les produits de la famille (auparavant Ctrl+H). Elle ouvre maintenant une liste des raccourcis à parcourir avec les flèches ; Échap la referme et vous ramène où vous étiez.</li>
+<li>Accessibilité : plus aucun bord de liste muet. Flèche haut sur la première ligne annonce « Premier, » suivi de la ligne ; flèche bas sur la dernière annonce « Dernier, ».</li>
+</ul>
+
+<h2>Version 1.05</h2>
+<ul>
+<li>À la fin de la vérification du démarrage, WingetAccess annonce « 7 mises à jour disponibles » (ou « 1 mise à jour disponible », « Aucune mise à jour disponible ») au lieu de « 7 mises à jour ».</li>
+</ul>
+
+<h2>Version 1.04</h2>
+<ul>
+<li>Au démarrage, WingetAccess annonce « Veuillez patienter pendant que WingetAccess vérifie si des mises à jour sont disponibles. »</li>
+</ul>
+
+<h2>Version 1.03</h2>
+<ul>
+<li>Nouveau : la <strong>progression</strong> est annoncée pendant une installation ou une mise à jour : « Téléchargement 35 % », par paliers de 5 %, puis « Installation en cours… » quand le programme d'installation démarre. Une désinstallation annonce « Désinstallation en cours… ».</li>
+<li>Correction : le journal montre enfin tout ce que dit Winget pendant une installation, une mise à jour ou une désinstallation. Ces lignes n'y apparaissaient pas.</li>
+</ul>
+
+<h2>Version 1.02</h2>
+<ul>
+<li>Nouveau : WingetAccess parle <strong>français et anglais</strong>. L'interface suit la langue de Windows au démarrage.</li>
+<li>Correction : sur un Windows en français, la description d'un logiciel (Tab depuis une liste) est de nouveau complète : version, éditeur, auteur, description et licence.</li>
+<li>Les descriptions écrites sur plusieurs lignes sont maintenant lues en entier.</li>
+</ul>
+
+<h2>Version 1.01</h2>
+<ul>
+<li>Nouveau : WingetAccess <strong>prépare Winget tout seul</strong>. Sur un ordinateur neuf ou quand Winget n'a jamais servi, il l'active, le répare ou l'installe au besoin, et accepte les conditions des sources. Plus besoin de taper Y dans une console.</li>
+<li>Quand une nouvelle version de Winget existe, elle est installée en premier, automatiquement.</li>
+<li>« Tout mettre à jour » traite les logiciels un par un et annonce chacun, par exemple « Mise à jour 3 sur 8 : Firefox… », puis donne le bilan.</li>
+<li>Nouveau : WingetAccess <strong>se met à jour tout seul</strong> au démarrage (menu Aide : « Rechercher une mise à jour de WingetAccess »).</li>
+<li>Le Programme d'installation d'application, qui contient Winget, ne peut plus être désinstallé par erreur depuis WingetAccess.</li>
+</ul>
+
+<h2>Version 1.00</h2>
+<ul>
+<li>Première version : trois onglets (Installés, Mises à jour, Recherche), ouverts avec Ctrl+1, Ctrl+2 et Ctrl+3, dont le nom est annoncé.</li>
+<li>Entrée met à jour ou installe le logiciel choisi, Ctrl+Maj+U met tout à jour, Suppr désinstalle, sans jamais taper de commande.</li>
+<li>Une zone Description dans chaque onglet, lue avec Tab depuis la liste.</li>
+<li>L'onglet Installés ne montre que les logiciels que Winget sait gérer.</li>
+<li>Quand deux versions d'un même logiciel sont installées, c'est la version de la ligne choisie qui est désinstallée.</li>
+<li>Programme portable : un seul fichier, rien à installer.</li>
+</ul>
+</body>
+</html>

@@ -1,6 +1,8 @@
 #include "MainWindow.h"
 #include "Localization.h"
 #include "Version.h"
+#include "ShortcutsDialog.h"
+#include "HelpResources.h"
 
 #include <wx/menu.h>
 #include <wx/sizer.h>
@@ -12,75 +14,18 @@
 #include <wx/weakref.h>
 #include <wx/time.h>
 #include <wx/app.h>
+#include <wx/file.h>
+#include <wx/filename.h>
 
 #include <algorithm>
 #include <functional>
 #include <thread>
 
-#define NOMINMAX
 #include <windows.h>
-#include <uiautomation.h>   // IRawElementProviderSimple, UiaRaiseNotificationEvent
-#include <oleauto.h>        // SysAllocString / SysFreeString
+#include <shellapi.h>   // ShellExecuteW
 
 namespace
 {
-// Minimal UIA provider for the main-window HWND. Its only job is to exist so
-// the window is a real UIA provider (returned from WM_GETOBJECT), which lets
-// NVDA/JAWS receive the notification events we raise. Content is still read
-// through the MSAA bridge via the host provider. A bare wx window is MSAA-only
-// and NVDA silently drops notifications raised on a plain host provider.
-class FrameUiaProvider : public IRawElementProviderSimple
-{
-public:
-    explicit FrameUiaProvider(HWND hwnd) : hwnd_(hwnd) {}
-
-    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&ref_); }
-    ULONG STDMETHODCALLTYPE Release() override
-    {
-        const LONG r = InterlockedDecrement(&ref_);
-        if (r == 0) delete this;
-        return r;
-    }
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override
-    {
-        if (ppv == nullptr) return E_INVALIDARG;
-        if (riid == __uuidof(IUnknown) || riid == __uuidof(IRawElementProviderSimple))
-        {
-            *ppv = static_cast<IRawElementProviderSimple*>(this);
-            AddRef();
-            return S_OK;
-        }
-        *ppv = nullptr;
-        return E_NOINTERFACE;
-    }
-
-    HRESULT STDMETHODCALLTYPE get_ProviderOptions(ProviderOptions* p) override
-    {
-        *p = static_cast<ProviderOptions>(ProviderOptions_ServerSideProvider
-                                        | ProviderOptions_UseComThreading);
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetPatternProvider(PATTERNID, IUnknown** p) override
-    {
-        *p = nullptr;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetPropertyValue(PROPERTYID id, VARIANT* p) override
-    {
-        p->vt = VT_EMPTY;
-        if (id == UIA_ControlTypePropertyId) { p->vt = VT_I4; p->lVal = UIA_PaneControlTypeId; }
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE get_HostRawElementProvider(IRawElementProviderSimple** p) override
-    {
-        return UiaHostProviderFromHwnd(hwnd_, p);
-    }
-
-private:
-    LONG ref_ = 1;
-    HWND hwnd_;
-};
-
 enum Ids
 {
     ID_REFRESH = wxID_HIGHEST + 1,
@@ -99,6 +44,8 @@ enum Ids
     ID_CHECK_UPDATE,
     ID_SELFUPDATE_TIMER,
     ID_ANNOUNCE_TIMER,
+    ID_MANUAL,
+    ID_CHANGELOG,
 };
 
 // "7 updates available", with the singular and the zero written out.
@@ -126,7 +73,7 @@ MainWindow::MainWindow(bool justUpdated)
 {
     // The frame's HWND exists now (base ctor created it); attach our UIA
     // provider so NVDA receives the notifications we raise (announce()).
-    uiaProvider_ = new FrameUiaProvider(reinterpret_cast<HWND>(GetHandle()));
+    announcer.attach(GetHandle());
 
     // --- menu bar ------------------------------------------------------------
     auto* menuActions = new wxMenu();
@@ -146,7 +93,11 @@ MainWindow::MainWindow(bool justUpdated)
     menuView->Append(ID_TAB_SEARCH, loc::tr("Search\tCtrl+3", "Recherche\tCtrl+3"));
 
     auto* menuHelp = new wxMenu();
-    menuHelp->Append(ID_HELP_KEYS, loc::tr("Keyboard shortcuts\tCtrl+H", "Raccourcis clavier\tCtrl+H"));
+    menuHelp->Append(ID_MANUAL, loc::tr("Manual\tF1", "Manuel\tF1"));
+    menuHelp->Append(ID_CHANGELOG, loc::tr("Changelog\tCtrl+F1", "Journal des modifications\tCtrl+F1"));
+    // Ctrl+Shift+H, the help key of every product of the family.
+    menuHelp->Append(ID_HELP_KEYS, loc::tr("Keyboard shortcuts\tCtrl+Shift+H",
+                                           "Raccourcis clavier\tCtrl+Shift+H"));
     menuHelp->Append(ID_CHECK_UPDATE, loc::tr("Check for a WingetAccess update", "Rechercher une mise à jour de WingetAccess"));
     menuHelp->Append(wxID_ABOUT, loc::tr("About", "À propos"));
 
@@ -238,6 +189,16 @@ MainWindow::MainWindow(bool justUpdated)
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { onRefresh(); }, ID_REFRESH);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { Close(); }, wxID_EXIT);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { onHelpKeys(); }, ID_HELP_KEYS);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&)
+    {
+        openHelpDocument(loc::isFrench() ? IDR_MANUAL_FR : IDR_MANUAL_EN,
+                         loc::isFrench() ? "Manual_fr.html" : "Manual_en.html");
+    }, ID_MANUAL);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&)
+    {
+        openHelpDocument(loc::isFrench() ? IDR_CHANGELOG_FR : IDR_CHANGELOG_EN,
+                         loc::isFrench() ? "Changelog_fr.html" : "Changelog_en.html");
+    }, ID_CHANGELOG);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { onAbout(); }, wxID_ABOUT);
     // Ctrl+1/2/3: the tab name is spoken through the static label that names
     // the focused control (see makeListPage) — a separate UIA notification
@@ -356,56 +317,24 @@ MainWindow::MainWindow(bool justUpdated)
 MainWindow::~MainWindow()
 {
     runner.terminate();
-    if (uiaProvider_ != nullptr)
-    {
-        static_cast<IRawElementProviderSimple*>(uiaProvider_)->Release();
-        uiaProvider_ = nullptr;
-    }
 }
 
 WXLRESULT MainWindow::MSWWindowProc(WXUINT nMsg, WXWPARAM wParam, WXLPARAM lParam)
 {
-    // Answer WM_GETOBJECT for the UIA root so NVDA connects via UIA and receives
-    // our notifications; everything else falls through to wx (which still
-    // answers OBJID_CLIENT with its MSAA implementation for the controls).
-    if (nMsg == WM_GETOBJECT && uiaProvider_ != nullptr
-        && static_cast<long>(lParam) == static_cast<long>(UiaRootObjectId))
-    {
-        return UiaReturnRawElementProvider(
-            reinterpret_cast<HWND>(GetHandle()), wParam, lParam,
-            static_cast<IRawElementProviderSimple*>(uiaProvider_));
-    }
+    WXLRESULT result = 0;
+    if (announcer.handleGetObject(nMsg, wParam, lParam, result))
+        return result;
     return wxFrame::MSWWindowProc(nMsg, wParam, lParam);
 }
 
 void MainWindow::announce(const wxString& text)
 {
-    if (text.empty() || uiaProvider_ == nullptr)
-        return;
-    BSTR msg = SysAllocString(text.wc_str());
-    if (msg != nullptr)
-    {
-        UiaRaiseNotificationEvent(static_cast<IRawElementProviderSimple*>(uiaProvider_),
-                                  NotificationKind_Other,
-                                  NotificationProcessing_All,
-                                  msg, /*activityId=*/nullptr);
-        SysFreeString(msg);
-    }
+    announcer.announce(text);
 }
 
 void MainWindow::announceProgress(const wxString& text)
 {
-    if (text.empty() || uiaProvider_ == nullptr)
-        return;
-    BSTR msg = SysAllocString(text.wc_str());
-    BSTR activity = SysAllocString(L"WingetAccess.Progress");
-    if (msg != nullptr && activity != nullptr)
-        UiaRaiseNotificationEvent(static_cast<IRawElementProviderSimple*>(uiaProvider_),
-                                  NotificationKind_ActionCompleted,
-                                  NotificationProcessing_MostRecent,
-                                  msg, activity);
-    SysFreeString(msg);
-    SysFreeString(activity);
+    announcer.announceProgress(text);
 }
 
 // --- action progress ---------------------------------------------------------
@@ -1421,6 +1350,30 @@ void MainWindow::onCharHook(wxKeyEvent& e)
         return;
     }
 
+    // Never a silent edge (family rule): Up on the first row says "First, ...",
+    // Down on the last "Last, ...", even with a single row. The native list
+    // would not move there, so the key is consumed.
+    if ((key == WXK_UP || key == WXK_DOWN) && !e.HasAnyModifiers()
+        && (focus == listInstalled || focus == listUpgrades || focus == listSearch))
+    {
+        auto* list = static_cast<wxListView*>(const_cast<wxWindow*>(focus));
+        const long count = list->GetItemCount();
+        const long row = list->GetFocusedItem();
+        const bool up = key == WXK_UP;
+        if (count > 0 && row >= 0 && ((up && row == 0) || (!up && row == count - 1)))
+        {
+            wxString text;
+            for (int c = 0; c < list->GetColumnCount(); ++c)
+            {
+                const wxString cell = list->GetItemText(row, c);
+                if (!cell.empty())
+                    text += (text.empty() ? "" : ", ") + cell;
+            }
+            announce((up ? loc::tr("First, ", "Premier, ") : loc::tr("Last, ", "Dernier, ")) + text);
+            return;
+        }
+    }
+
     e.Skip();
 }
 
@@ -1444,44 +1397,63 @@ void MainWindow::onItemActivated(wxListEvent& e)
 
 void MainWindow::onHelpKeys()
 {
-    wxMessageBox(
-        loc::tr("Ctrl+1: Installed\n"
-                "Ctrl+2: Updates\n"
-                "Ctrl+3: Search (the focus goes to the field)\n"
-                "Enter in a list: update (Installed, Updates) or install (Search)\n"
-                "Tab from a list: description of the selected package\n"
-                "Ctrl+U: update the selection\n"
-                "Ctrl+Shift+U: update all\n"
-                "Ctrl+I: install the selection\n"
-                "Delete: uninstall the selection (with confirmation)\n"
-                "Ctrl+Shift+C: copy the package ID\n"
-                "F5: refresh the current tab (or prepare winget again)\n"
-                "The log at the bottom of the window keeps winget's full output.\n"
-                "At startup, WingetAccess prepares winget on its own: it installs or repairs "
-                "it when missing, accepts the source agreements and updates it first when a "
-                "new version exists.\n"
-                "WingetAccess also updates itself from GitHub, at startup, as soon as no "
-                "operation is running (Help menu: Check for a WingetAccess update).",
-                "Ctrl+1 : Installés\n"
-                "Ctrl+2 : Mises à jour\n"
-                "Ctrl+3 : Recherche (le focus va au champ)\n"
-                "Entrée dans une liste : mettre à jour (Installés, Mises à jour) ou installer "
-                "(Recherche)\n"
-                "Tab depuis une liste : description du paquet sélectionné\n"
-                "Ctrl+U : mettre à jour la sélection\n"
-                "Ctrl+Maj+U : tout mettre à jour\n"
-                "Ctrl+I : installer la sélection\n"
-                "Suppr : désinstaller la sélection (avec confirmation)\n"
-                "Ctrl+Maj+C : copier l'identifiant du paquet\n"
-                "F5 : actualiser l'onglet courant (ou relancer la préparation de winget)\n"
-                "Le journal en bas de la fenêtre garde la sortie complète de winget.\n"
-                "Au démarrage, WingetAccess prépare winget tout seul : il l'installe ou le "
-                "répare s'il manque, accepte les conditions des sources et le met à jour en "
-                "premier quand une nouvelle version existe.\n"
-                "WingetAccess se met aussi à jour tout seul depuis GitHub, au démarrage, dès "
-                "qu'aucune opération n'est en cours (menu Aide : Rechercher une mise à jour "
-                "de WingetAccess)."),
-        loc::tr("Keyboard shortcuts", "Raccourcis clavier"), wxOK | wxICON_INFORMATION, this);
+    const std::vector<wxString> lines = {
+        loc::tr("Ctrl+1: Installed tab", "Ctrl+1 : onglet Installés"),
+        loc::tr("Ctrl+2: Updates tab", "Ctrl+2 : onglet Mises à jour"),
+        loc::tr("Ctrl+3: Search tab (the cursor goes to the field)",
+                "Ctrl+3 : onglet Recherche (le curseur va au champ)"),
+        loc::tr("Enter in a list: update (Installed, Updates) or install (Search)",
+                "Entrée dans une liste : mettre à jour (Installés, Mises à jour) ou installer (Recherche)"),
+        loc::tr("Tab from a list: description of the selected program",
+                "Tab depuis une liste : description du logiciel sélectionné"),
+        loc::tr("Ctrl+U: update the selection", "Ctrl+U : mettre à jour la sélection"),
+        loc::tr("Ctrl+Shift+U: update all", "Ctrl+Maj+U : tout mettre à jour"),
+        loc::tr("Ctrl+I: install the selection", "Ctrl+I : installer la sélection"),
+        loc::tr("Delete: uninstall the selection (with confirmation)",
+                "Suppr : désinstaller la sélection (avec confirmation)"),
+        loc::tr("Ctrl+Shift+C: copy the program ID", "Ctrl+Maj+C : copier l'identifiant du logiciel"),
+        loc::tr("F5: refresh the current tab (or prepare Winget again)",
+                "F5 : actualiser l'onglet courant (ou relancer la préparation de Winget)"),
+        loc::tr("F1: manual", "F1 : manuel"),
+        loc::tr("Ctrl+F1: changelog", "Ctrl+F1 : journal des modifications"),
+        loc::tr("Ctrl+Shift+H: this list of shortcuts", "Ctrl+Maj+H : cette liste des raccourcis"),
+        loc::tr("Alt+F4: exit", "Alt+F4 : quitter"),
+    };
+    wxWindow* previous = FindFocus();
+    ShortcutsDialog dialog(this, lines);
+    dialog.ShowModal();
+    if (previous != nullptr)
+        previous->SetFocus();
+}
+
+void MainWindow::openHelpDocument(int resourceId, const wxString& fileName)
+{
+    // The manual and the changelog live inside the exe (portable: one file).
+    // Written to the temp folder at every opening, from the running exe, so
+    // the page is always the one of this version, then opened in the browser.
+    HRSRC res = FindResourceW(nullptr, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
+    HGLOBAL data = res != nullptr ? LoadResource(nullptr, res) : nullptr;
+    const void* bytes = data != nullptr ? LockResource(data) : nullptr;
+    const DWORD size = res != nullptr ? SizeofResource(nullptr, res) : 0;
+
+    const wxString dir = wxFileName::GetTempDir() + wxFILE_SEP_PATH + "WingetAccess";
+    const wxString path = dir + wxFILE_SEP_PATH + fileName;
+    bool ok = bytes != nullptr && size > 0
+              && (wxDirExists(dir) || wxMkdir(dir));
+    if (ok)
+    {
+        wxFile out(path, wxFile::write);
+        ok = out.IsOpened() && out.Write(bytes, size) == size;
+    }
+    if (ok)
+        ok = reinterpret_cast<INT_PTR>(ShellExecuteW(reinterpret_cast<HWND>(GetHandle()), L"open",
+                                                     path.wc_str(), nullptr, nullptr,
+                                                     SW_SHOWNORMAL)) > 32;
+    if (!ok)
+    {
+        log(wxString::Format(loc::tr("Could not open %s.", "Impossible d'ouvrir %s."), path));
+        announce(loc::tr("Could not open the document", "Impossible d'ouvrir le document"));
+    }
 }
 
 void MainWindow::onAbout()

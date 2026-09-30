@@ -24,8 +24,15 @@ add_executable(WingetAccess WIN32
     Source/SelfUpdate.cpp
     Source/Localization.cpp
     Source/TerminalStream.cpp
-    Source/WingetAccess.rc     # manifest (asInvoker/DPI) + version info
+    Source/UiaAnnouncer.cpp
+    Source/ShortcutsDialog.cpp
+    Source/WingetAccess.rc     # manifest (asInvoker/DPI), version info, help pages
 )
+
+# The help pages are embedded by the resource script: a changed page must
+# rebuild the resources, which CMake cannot see from the .rc alone.
+set_source_files_properties(Source/WingetAccess.rc PROPERTIES OBJECT_DEPENDS
+    "${CMAKE_SOURCE_DIR}/help/Manual_en.html;${CMAKE_SOURCE_DIR}/help/Manual_fr.html;${CMAKE_SOURCE_DIR}/help/Changelog_en.html;${CMAKE_SOURCE_DIR}/help/Changelog_fr.html")
 
 # Header-only JSON for the GitHub releases API (self-update).
 find_package(nlohmann_json CONFIG REQUIRED)

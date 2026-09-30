@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual — WingetAccess</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; max-width: 820px; margin: 1.5em auto; padding: 0 1em; line-height: 1.55; }
+  h1 { font-size: 1.6em; }
+  h2 { font-size: 1.25em; margin-top: 1.6em; border-bottom: 1px solid #ccc; padding-bottom: .2em; }
+  ul { margin-top: .3em; }
+  kbd { background:#eee; border:1px solid #bbb; border-radius:3px; padding:0 .35em; font-family:inherit; }
+</style>
+</head>
+<body>
+<h1>WingetAccess — Manual</h1>
+
+<p>WingetAccess lets you <strong>install, update and uninstall your Windows software</strong> without ever typing a command, with your screen reader (NVDA, JAWS or Narrator). It relies on Winget, the software manager built into Windows: you no longer need to copy a program's name to type "winget install" or "winget upgrade" by hand.</p>
+<p>WingetAccess is a <strong>portable</strong> program: a single file, <code>WingetAccess.exe</code>, that you put wherever you like. There is nothing to install, and it updates itself.</p>
+
+<h2>Contents</h2>
+<ul>
+<li>At startup</li>
+<li>The window</li>
+<li>Moving around</li>
+<li>Installing a program</li>
+<li>Updating your programs</li>
+<li>Uninstalling a program</li>
+<li>A program's description</li>
+<li>What you hear during an operation</li>
+<li>The log</li>
+<li>Windows permissions</li>
+<li>WingetAccess updates</li>
+<li>Language</li>
+<li>Keyboard shortcuts</li>
+<li>Troubleshooting</li>
+</ul>
+
+<h2>At startup</h2>
+<p>When it opens, you hear "Please wait while WingetAccess checks for available updates." WingetAccess then checks Winget, loads your installed programs and the available updates. When it is done, it announces the number found, for example "7 updates available".</p>
+<p>WingetAccess <strong>prepares Winget on its own</strong>. On a new computer, or when Winget has never been used, it activates, repairs or installs it as needed, and accepts the terms of use of the software sources for you. You never have to type "Y" in a console. If a newer Winget exists, it installs it first, before anything else.</p>
+<p>If Winget really cannot be prepared (without an Internet connection, for example), a dialog box explains it. Check the connection, then press <kbd>F5</kbd> to try again.</p>
+
+<h2>The window</h2>
+<p>The window has three tabs:</p>
+<ul>
+<li><strong>Installed</strong>: the programs on your computer that Winget can manage, with their name, ID, version and, when there is one, the available version. Programs that Winget sees but cannot manage are not listed.</li>
+<li><strong>Updates</strong>: only the programs that have a newer version.</li>
+<li><strong>Search</strong>: a field to look for a program, the "Start search" button and the list of results.</li>
+</ul>
+<p>In each tab, a <strong>Description</strong> box follows the list. At the bottom of the window, the <strong>Log</strong> keeps the details of everything that happened.</p>
+
+<h2>Moving around</h2>
+<ul>
+<li><kbd>Ctrl+1</kbd>, <kbd>Ctrl+2</kbd> and <kbd>Ctrl+3</kbd> open the Installed, Updates and Search tabs. The tab name is announced, then the selected row. For Search, the cursor goes straight to the field.</li>
+<li>In a list, the Up and Down arrows move from one program to the next. The edge of a list is never silent: Up on the first row announces "First," followed by the row, and Down on the last row announces "Last,".</li>
+<li><kbd>Tab</kbd> and <kbd>Shift+Tab</kbd> move from one area to the next: list, description, log.</li>
+</ul>
+
+<h2>Installing a program</h2>
+<ul>
+<li>Press <kbd>Ctrl+3</kbd>, type a word ("audacity", "7zip"…), then <kbd>Enter</kbd>.</li>
+<li>The number of results is announced and the cursor moves to the list.</li>
+<li>Choose a result with the arrows, then press <kbd>Enter</kbd> (or <kbd>Ctrl+I</kbd>). The install runs without any window, accepting the licenses for you.</li>
+</ul>
+
+<h2>Updating your programs</h2>
+<ul>
+<li>In the Updates tab (<kbd>Ctrl+2</kbd>), choose a program then press <kbd>Enter</kbd> (or <kbd>Ctrl+U</kbd>).</li>
+<li><kbd>Ctrl+Shift+U</kbd> updates <strong>everything</strong>, after confirmation. Programs are processed one at a time and each one is announced, for example "Update 3 of 8: Firefox…". At the end, you hear the summary: the number of successes and failures.</li>
+<li>In the Installed tab, <kbd>Enter</kbd> also tries to update the chosen program. If there is nothing to update, Winget simply says so.</li>
+</ul>
+<p>After each operation, the Installed and Updates tabs refresh on their own.</p>
+
+<h2>Uninstalling a program</h2>
+<ul>
+<li>In the Installed or Updates tab, choose the program then press <kbd>Delete</kbd>.</li>
+<li>Answer "Yes" to the question "Uninstall …?".</li>
+<li>When two versions of the same program are installed under the same ID, the version of the chosen row is the one uninstalled.</li>
+<li>App Installer, which contains Winget, cannot be uninstalled from WingetAccess: without it, WingetAccess could no longer do anything.</li>
+</ul>
+
+<h2>A program's description</h2>
+<p>From a list, press <kbd>Tab</kbd>: the Description box reads the details of the selected program: its version, publisher, author, description, home page and license. It loads in the background when you stop on a row. If you get there before it has loaded, you hear "Loading description…", then the details are read as soon as they are ready. Descriptions come from the programs' publishers.</p>
+
+<h2>What you hear during an operation</h2>
+<ul>
+<li>At the start: "Installing …", "Updating …" or "Uninstalling …".</li>
+<li>During the download: the progress, in 5% steps, for example "Downloading 35%". On a very fast connection, some steps may be skipped.</li>
+<li>When the installer starts: "Installing…" (or "Uninstalling…"). This step has no percentage, because silent installers do not report one.</li>
+<li>At the end: "Done", or "Failed" followed by a code. The details are in the log.</li>
+</ul>
+<p>One operation runs at a time. If you ask for another while one is running, you hear "Busy, operation in progress".</p>
+
+<h2>The log</h2>
+<p>The Log box, at the bottom of the window, is read-only. It keeps everything Winget said during the session: install lines, errors, Winget preparation. When an operation fails, that is where the exact reason is.</p>
+
+<h2>Windows permissions</h2>
+<p>WingetAccess starts without administrator rights. When a program needs them to install, Windows itself shows the permission request (UAC), at the right moment. Answer "Yes" to continue.</p>
+
+<h2>WingetAccess updates</h2>
+<p>At every start, WingetAccess checks whether a newer version of itself exists. If so, it downloads it, checks that it is intact, takes its place and restarts on its own. You then hear "WingetAccess updated, version …". It always waits for the end of a running operation: an install is never interrupted.</p>
+<p>To check on demand: Help menu, "Check for a WingetAccess update".</p>
+
+<h2>Language</h2>
+<p>WingetAccess follows the Windows language at startup: any French Windows, including Canadian French, gives French; every other one gives English. The texts that come from Winget (columns, descriptions, log lines) are written by Winget in the Windows language.</p>
+<p>To force a language, start <code>WingetAccess.exe --lang=en</code> or <code>WingetAccess.exe --lang=fr</code>, for example from a shortcut.</p>
+
+<h2>Keyboard shortcuts</h2>
+<p><kbd>Ctrl+Shift+H</kbd> opens the list of all the shortcuts, to browse with the Up and Down arrows; <kbd>Escape</kbd> closes it and takes you back where you were. Here it is:</p>
+<ul>
+<li><kbd>Ctrl+1</kbd>: Installed tab</li>
+<li><kbd>Ctrl+2</kbd>: Updates tab</li>
+<li><kbd>Ctrl+3</kbd>: Search tab (the cursor goes to the field)</li>
+<li><kbd>Enter</kbd> in a list: update (Installed, Updates) or install (Search)</li>
+<li><kbd>Tab</kbd> from a list: description of the selected program</li>
+<li><kbd>Ctrl+U</kbd>: update the selection</li>
+<li><kbd>Ctrl+Shift+U</kbd>: update all</li>
+<li><kbd>Ctrl+I</kbd>: install the selection</li>
+<li><kbd>Delete</kbd>: uninstall the selection (with confirmation)</li>
+<li><kbd>Ctrl+Shift+C</kbd>: copy the program ID</li>
+<li><kbd>F5</kbd>: refresh the current tab (or prepare Winget again)</li>
+<li><kbd>F1</kbd>: manual</li>
+<li><kbd>Ctrl+F1</kbd>: changelog</li>
+<li><kbd>Ctrl+Shift+H</kbd>: this list of shortcuts</li>
+<li><kbd>Alt+F4</kbd>: exit</li>
+</ul>
+<p>Two more shortcut letters: <kbd>Alt+S</kbd> goes to the search field (in the Search tab) and <kbd>Alt+L</kbd> goes to the log.</p>
+
+<h2>Troubleshooting</h2>
+<ul>
+<li><strong>An operation fails</strong>: read the last lines of the log, which give Winget's reason.</li>
+<li><strong>"winget not found"</strong>: check the Internet connection then press <kbd>F5</kbd>. You can also install "App Installer" from the Microsoft Store, then press <kbd>F5</kbd>.</li>
+<li><strong>"Busy, operation in progress"</strong>: wait for the running operation to end, announced by "Done" or "Failed".</li>
+<li><strong>A program is not in Installed</strong>: Winget cannot manage it (it is not in its sources). Look for it in the Search tab.</li>
+</ul>
+
+<p>WingetAccess is free software by ReaperAccessible (GPL-3.0 license).</p>
+</body>
+</html>
