@@ -101,6 +101,16 @@ enum Ids
     ID_ANNOUNCE_TIMER,
 };
 
+// "7 updates available", with the singular and the zero written out.
+wxString updatesAvailableText(size_t count)
+{
+    if (count == 0)
+        return loc::tr("No updates available", "Aucune mise à jour disponible");
+    if (count == 1)
+        return loc::tr("1 update available", "1 mise à jour disponible");
+    return wxString::Format(loc::tr("%zu updates available", "%zu mises à jour disponibles"), count);
+}
+
 // A function, not a global constant: the language is only known once the
 // application has started.
 wxString busyMsg()
@@ -995,7 +1005,7 @@ void MainWindow::refreshUpgrades()
             if (exitCode != 0 && tableUpgrades.empty())
                 log(wxString::Format(loc::tr("winget upgrade failed (code %d).", "winget upgrade a échoué (code %d)."), exitCode));
             else
-                log(wxString::Format(loc::tr("%zu updates available.", "%zu mises à jour disponibles."), tableUpgrades.rows.size()));
+                log(updatesAvailableText(tableUpgrades.rows.size()) + ".");
 
             // winget itself first: an outdated App Installer is updated on its
             // own at startup (once per session), then the lists are reloaded.
@@ -1009,7 +1019,7 @@ void MainWindow::refreshUpgrades()
                     return;
                 }
             }
-            announce(wxString::Format(loc::tr("%zu updates", "%zu mises à jour"), tableUpgrades.rows.size()));
+            announce(updatesAvailableText(tableUpgrades.rows.size()));
         });
     if (!started)
         reportStartFailure();
