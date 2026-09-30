@@ -322,14 +322,22 @@ MainWindow::MainWindow(bool justUpdated)
     Bind(wxEVT_TIMER, [this](wxTimerEvent&) { announce(delayedAnnouncement); }, ID_ANNOUNCE_TIMER);
 
     log(wxString::Format(L"WingetAccess %s.", WINGETACCESS_VERSION_STR));
+    // The startup checks (winget, lists, updates) take a few seconds of
+    // silence: say so. One sentence, spoken once the window and its first
+    // focus have been read; after a self-update it starts with the new version
+    // so the two messages do not cut each other off.
+    delayedAnnouncement = loc::tr("Please wait while WingetAccess checks for available updates.",
+                                  "Veuillez patienter pendant que WingetAccess vérifie si des mises "
+                                  "à jour sont disponibles.");
     if (justUpdated)
     {
-        // Spoken once the window and its first focus have been read.
-        delayedAnnouncement = wxString::Format(loc::tr("WingetAccess updated, version %s", "WingetAccess mis à jour, version %s"),
-                                               WINGETACCESS_VERSION_STR);
-        log(delayedAnnouncement + ".");
-        announceTimer.Start(1500, wxTIMER_ONE_SHOT);
+        const wxString updated = wxString::Format(
+            loc::tr("WingetAccess updated, version %s", "WingetAccess mis à jour, version %s"),
+            WINGETACCESS_VERSION_STR);
+        log(updated + ".");
+        delayedAnnouncement = updated + ". " + delayedAnnouncement;
     }
+    announceTimer.Start(1000, wxTIMER_ONE_SHOT);
     selfupdate::cleanupOldCopy();
     checkSelfUpdate(false);
     ensureWinget([this]() { startRefreshChain(true); });
