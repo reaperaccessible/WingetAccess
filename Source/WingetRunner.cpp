@@ -1,4 +1,5 @@
 #include "WingetRunner.h"
+#include "Localization.h"
 
 #include <wx/app.h>
 #include <wx/utils.h>
@@ -124,7 +125,7 @@ bool WingetRunner::launch(const wxString& program,
     {
         busy.store(false);
         if (onLine)
-            onLine(L"Erreur interne : CreatePipe a échoué.");
+            onLine(loc::tr("Internal error: CreatePipe failed.", "Erreur interne : CreatePipe a échoué."));
         return false;
     }
     SetHandleInformation(readEnd, HANDLE_FLAG_INHERIT, 0);
@@ -138,7 +139,7 @@ bool WingetRunner::launch(const wxString& program,
         CloseHandle(writeEnd);
         busy.store(false);
         if (onLine)
-            onLine(L"Erreur interne : CreatePipe a échoué.");
+            onLine(loc::tr("Internal error: CreatePipe failed.", "Erreur interne : CreatePipe a échoué."));
         return false;
     }
     SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0);

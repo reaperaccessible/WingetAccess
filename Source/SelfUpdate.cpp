@@ -1,4 +1,5 @@
 #include "SelfUpdate.h"
+#include "Localization.h"
 #include "Version.h"
 
 #include <nlohmann/json.hpp>
@@ -42,7 +43,7 @@ wxString lastErrorText(DWORD code)
     FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
                    | FORMAT_MESSAGE_IGNORE_INSERTS,
                    nullptr, code, 0, reinterpret_cast<wchar_t*>(&text), 0, nullptr);
-    wxString msg = text != nullptr ? wxString(text) : wxString::Format("erreur %lu", code);
+    wxString msg = text != nullptr ? wxString(text) : wxString::Format(loc::tr("error %lu", "erreur %lu"), code);
     if (text != nullptr)
         LocalFree(text);
     return msg.Strip(wxString::both);
@@ -62,7 +63,7 @@ bool httpGet(const wxString& url, const wchar_t* accept,
     parts.dwExtraInfoLength = static_cast<DWORD>(-1);
     if (!WinHttpCrackUrl(wurl.c_str(), 0, 0, &parts))
     {
-        error = L"adresse invalide";
+        error = loc::tr("invalid address", "adresse invalide");
         return false;
     }
     const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
@@ -101,7 +102,7 @@ bool httpGet(const wxString& url, const wchar_t* accept,
                                 WINHTTP_HEADER_NAME_BY_INDEX, &status, &size,
                                 WINHTTP_NO_HEADER_INDEX);
             if (status != 200)
-                error = wxString::Format(L"le serveur a répondu %lu", status);
+                error = wxString::Format(loc::tr("the server answered %lu", "le serveur a répondu %lu"), status);
             else
             {
                 ok = true;
@@ -120,7 +121,7 @@ bool httpGet(const wxString& url, const wchar_t* accept,
                         break;
                     if (!sink(buffer.data(), got))
                     {
-                        error = L"écriture impossible";
+                        error = loc::tr("write failed", "écriture impossible");
                         ok = false;
                         break;
                     }
@@ -218,7 +219,7 @@ Release fetchLatest()
         r.tag = wxString::FromUTF8(release.value("tag_name", std::string()));
         if (!parseVersion(r.tag, r.major, r.minor))
         {
-            r.error = wxString::Format(L"étiquette de version illisible : %s", r.tag);
+            r.error = wxString::Format(loc::tr("unreadable version tag: %s", "étiquette de version illisible : %s"), r.tag);
             return r;
         }
         for (const auto& asset : release.value("assets", nlohmann::json::array()))
@@ -235,14 +236,14 @@ Release fetchLatest()
         }
         if (r.assetUrl.empty())
         {
-            r.error = wxString::Format(L"la version %s ne contient pas WingetAccess.exe", r.tag);
+            r.error = wxString::Format(loc::tr("version %s does not contain WingetAccess.exe", "la version %s ne contient pas WingetAccess.exe"), r.tag);
             return r;
         }
         r.ok = true;
     }
     catch (const std::exception&)
     {
-        r.error = L"réponse de GitHub illisible";
+        r.error = loc::tr("unreadable answer from GitHub", "réponse de GitHub illisible");
     }
     return r;
 }
@@ -254,7 +255,7 @@ wxString download(const Release& r, wxString& error)
                               FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE)
     {
-        error = wxString::Format(L"impossible d'écrire dans le dossier de WingetAccess (%s)",
+        error = wxString::Format(loc::tr("cannot write to the WingetAccess folder (%s)", "impossible d'écrire dans le dossier de WingetAccess (%s)"),
                                  lastErrorText(GetLastError()));
         return wxString();
     }
@@ -274,9 +275,9 @@ wxString download(const Release& r, wxString& error)
     CloseHandle(file);
 
     if (ok && r.assetSize > 0 && written != r.assetSize)
-        error = wxString::Format(L"fichier incomplet (%lld octets sur %lld)", written, r.assetSize);
+        error = wxString::Format(loc::tr("incomplete file (%lld of %lld bytes)", "fichier incomplet (%lld octets sur %lld)"), written, r.assetSize);
     else if (ok && !r.sha256.empty() && sha.hex() != r.sha256)
-        error = L"l'empreinte SHA-256 ne correspond pas";
+        error = loc::tr("the SHA-256 hash does not match", "l'empreinte SHA-256 ne correspond pas");
     else if (ok)
         return target;
 
@@ -293,14 +294,14 @@ bool installAndRestart(const wxString& newFile, wxString& error)
     DeleteFileW(old.wc_str());
     if (!MoveFileExW(exe.wc_str(), old.wc_str(), MOVEFILE_REPLACE_EXISTING))
     {
-        error = wxString::Format(L"impossible de renommer WingetAccess.exe (%s)",
+        error = wxString::Format(loc::tr("cannot rename WingetAccess.exe (%s)", "impossible de renommer WingetAccess.exe (%s)"),
                                  lastErrorText(GetLastError()));
         DeleteFileW(newFile.wc_str());
         return false;
     }
     if (!MoveFileExW(newFile.wc_str(), exe.wc_str(), 0))
     {
-        error = wxString::Format(L"impossible de mettre la nouvelle version en place (%s)",
+        error = wxString::Format(loc::tr("cannot put the new version in place (%s)", "impossible de mettre la nouvelle version en place (%s)"),
                                  lastErrorText(GetLastError()));
         MoveFileExW(old.wc_str(), exe.wc_str(), 0);
         DeleteFileW(newFile.wc_str());
@@ -315,7 +316,7 @@ bool installAndRestart(const wxString& newFile, wxString& error)
     if (!CreateProcessW(exe.wc_str(), cmd.data(), nullptr, nullptr, FALSE, 0, nullptr,
                         dir.wc_str(), &si, &pi))
     {
-        error = wxString::Format(L"impossible de lancer la nouvelle version (%s)",
+        error = wxString::Format(loc::tr("cannot start the new version (%s)", "impossible de lancer la nouvelle version (%s)"),
                                  lastErrorText(GetLastError()));
         // Put the running version back under its name.
         MoveFileExW(exe.wc_str(), newFile.wc_str(), MOVEFILE_REPLACE_EXISTING);

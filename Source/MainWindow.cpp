@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "Localization.h"
 #include "Version.h"
 
 #include <wx/menu.h>
@@ -99,7 +100,12 @@ enum Ids
     ID_ANNOUNCE_TIMER,
 };
 
-const wxString kBusyMsg = L"Occupé, opération en cours";
+// A function, not a global constant: the language is only known once the
+// application has started.
+wxString busyMsg()
+{
+    return loc::tr("Busy, operation in progress", "Occupé, opération en cours");
+}
 } // namespace
 
 MainWindow::MainWindow(bool justUpdated)
@@ -113,30 +119,30 @@ MainWindow::MainWindow(bool justUpdated)
 
     // --- menu bar ------------------------------------------------------------
     auto* menuActions = new wxMenu();
-    menuActions->Append(ID_UPGRADE_SELECTED, L"Mettre à jour la sélection\tCtrl+U");
-    menuActions->Append(ID_UPGRADE_ALL, L"Tout mettre à jour\tCtrl+Shift+U");
-    menuActions->Append(ID_INSTALL_SELECTED, L"Installer la sélection\tCtrl+I");
-    menuActions->Append(ID_UNINSTALL_SELECTED, L"Désinstaller la sélection");
+    menuActions->Append(ID_UPGRADE_SELECTED, loc::tr("Update selection\tCtrl+U", "Mettre à jour la sélection\tCtrl+U"));
+    menuActions->Append(ID_UPGRADE_ALL, loc::tr("Update all\tCtrl+Shift+U", "Tout mettre à jour\tCtrl+Shift+U"));
+    menuActions->Append(ID_INSTALL_SELECTED, loc::tr("Install selection\tCtrl+I", "Installer la sélection\tCtrl+I"));
+    menuActions->Append(ID_UNINSTALL_SELECTED, loc::tr("Uninstall selection", "Désinstaller la sélection"));
     menuActions->AppendSeparator();
-    menuActions->Append(ID_COPY_ID, "Copier l'identifiant\tCtrl+Shift+C");
-    menuActions->Append(ID_REFRESH, "Actualiser\tF5");
+    menuActions->Append(ID_COPY_ID, loc::tr("Copy ID\tCtrl+Shift+C", "Copier l'identifiant\tCtrl+Shift+C"));
+    menuActions->Append(ID_REFRESH, loc::tr("Refresh\tF5", "Actualiser\tF5"));
     menuActions->AppendSeparator();
-    menuActions->Append(wxID_EXIT, "Quitter\tAlt+F4");
+    menuActions->Append(wxID_EXIT, loc::tr("Exit\tAlt+F4", "Quitter\tAlt+F4"));
 
     auto* menuView = new wxMenu();
-    menuView->Append(ID_TAB_INSTALLED, L"Installés\tCtrl+1");
-    menuView->Append(ID_TAB_UPGRADES, L"Mises à jour\tCtrl+2");
-    menuView->Append(ID_TAB_SEARCH, "Recherche\tCtrl+3");
+    menuView->Append(ID_TAB_INSTALLED, loc::tr("Installed\tCtrl+1", "Installés\tCtrl+1"));
+    menuView->Append(ID_TAB_UPGRADES, loc::tr("Updates\tCtrl+2", "Mises à jour\tCtrl+2"));
+    menuView->Append(ID_TAB_SEARCH, loc::tr("Search\tCtrl+3", "Recherche\tCtrl+3"));
 
     auto* menuHelp = new wxMenu();
-    menuHelp->Append(ID_HELP_KEYS, "Raccourcis clavier\tCtrl+H");
-    menuHelp->Append(ID_CHECK_UPDATE, L"Rechercher une mise à jour de WingetAccess");
-    menuHelp->Append(wxID_ABOUT, L"À propos");
+    menuHelp->Append(ID_HELP_KEYS, loc::tr("Keyboard shortcuts\tCtrl+H", "Raccourcis clavier\tCtrl+H"));
+    menuHelp->Append(ID_CHECK_UPDATE, loc::tr("Check for a WingetAccess update", "Rechercher une mise à jour de WingetAccess"));
+    menuHelp->Append(wxID_ABOUT, loc::tr("About", "À propos"));
 
     auto* bar = new wxMenuBar();
     bar->Append(menuActions, "&Actions");
-    bar->Append(menuView, "Afficha&ge");
-    bar->Append(menuHelp, "&Aide");
+    bar->Append(menuView, loc::tr("&View", "Afficha&ge"));
+    bar->Append(menuHelp, loc::tr("&Help", "&Aide"));
     SetMenuBar(bar);
 
     // --- layout --------------------------------------------------------------
@@ -157,7 +163,7 @@ MainWindow::MainWindow(bool justUpdated)
         auto* sizer = new wxBoxSizer(wxVERTICAL);
         if (extraTop != nullptr)
             sizer->Add(extraTop, 0, wxEXPAND | wxALL, 6);
-        auto* label = new wxStaticText(page, wxID_ANY, listLabel + " :");
+        auto* label = new wxStaticText(page, wxID_ANY, listLabel);
         sizer->Add(label, 0, wxLEFT | wxRIGHT | wxTOP, 6);
         listOut = new wxListView(page, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                                  wxLC_REPORT | wxLC_SINGLE_SEL);
@@ -165,7 +171,7 @@ MainWindow::MainWindow(bool justUpdated)
 
         // Description of the selected row, next in the tab order after the
         // list; filled asynchronously via `winget show`.
-        sizer->Add(new wxStaticText(page, wxID_ANY, "Description :"), 0,
+        sizer->Add(new wxStaticText(page, wxID_ANY, loc::tr("Description:", "Description :")), 0,
                    wxLEFT | wxRIGHT, 6);
         descBox[pageIndex] = new wxTextCtrl(page, wxID_ANY, wxEmptyString,
                                             wxDefaultPosition, wxSize(-1, 110),
@@ -177,23 +183,27 @@ MainWindow::MainWindow(bool justUpdated)
         return page;
     };
 
-    makeListPage(L"Installés", L"Installés", listInstalled, 0);
-    makeListPage(L"Mises à jour", L"Mises à jour", listUpgrades, 1);
+    // The list label carries its own colon: French puts a space before it.
+    makeListPage(loc::tr("Installed", "Installés"), loc::tr("Installed:", "Installés :"),
+                 listInstalled, 0);
+    makeListPage(loc::tr("Updates", "Mises à jour"), loc::tr("Updates:", "Mises à jour :"),
+                 listUpgrades, 1);
 
     // Search page: field + button above the list.
     {
         auto* page = new wxPanel(notebook);
         auto* top = new wxPanel(page);
         auto* topSizer = new wxBoxSizer(wxHORIZONTAL);
-        auto* label = new wxStaticText(top, wxID_ANY, "&Recherche :");
+        auto* label = new wxStaticText(top, wxID_ANY, loc::tr("&Search:", "&Recherche :"));
         searchBox = new wxTextCtrl(top, wxID_ANY, wxEmptyString, wxDefaultPosition,
                                    wxDefaultSize, wxTE_PROCESS_ENTER);
-        auto* goBtn = new wxButton(top, ID_SEARCH_GO, "Lancer la recherche");
+        auto* goBtn = new wxButton(top, ID_SEARCH_GO, loc::tr("Start search", "Lancer la recherche"));
         topSizer->Add(label, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
         topSizer->Add(searchBox, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
         topSizer->Add(goBtn, 0, wxALIGN_CENTER_VERTICAL);
         top->SetSizer(topSizer);
-        makeListPage("Recherche", L"Résultats", listSearch, 2, top, page);
+        makeListPage(loc::tr("Search", "Recherche"), loc::tr("Results:", "Résultats :"),
+                     listSearch, 2, top, page);
     }
 
     journal = new wxTextCtrl(root, wxID_ANY, wxEmptyString, wxDefaultPosition,
@@ -203,7 +213,7 @@ MainWindow::MainWindow(bool justUpdated)
 
     auto* rootSizer = new wxBoxSizer(wxVERTICAL);
     rootSizer->Add(notebook, 1, wxEXPAND | wxALL, 4);
-    rootSizer->Add(new wxStaticText(root, wxID_ANY, "&Journal :"), 0,
+    rootSizer->Add(new wxStaticText(root, wxID_ANY, loc::tr("&Log:", "&Journal :")), 0,
                    wxLEFT | wxRIGHT, 8);
     rootSizer->Add(journal, 0, wxEXPAND | wxALL, 4);
     root->SetSizer(rootSizer);
@@ -282,7 +292,7 @@ MainWindow::MainWindow(bool justUpdated)
                 return;
             descPendingId = id;
             descPendingPage = pageIndex;
-            descBox[pageIndex]->SetValue(L"Chargement de la description…");
+            descBox[pageIndex]->SetValue(loc::tr("Loading description…", "Chargement de la description…"));
             descTimer.Start(400, wxTIMER_ONE_SHOT);
         });
     };
@@ -314,7 +324,7 @@ MainWindow::MainWindow(bool justUpdated)
     if (justUpdated)
     {
         // Spoken once the window and its first focus have been read.
-        delayedAnnouncement = wxString::Format(L"WingetAccess mis à jour, version %s",
+        delayedAnnouncement = wxString::Format(loc::tr("WingetAccess updated, version %s", "WingetAccess mis à jour, version %s"),
                                                WINGETACCESS_VERSION_STR);
         log(delayedAnnouncement + ".");
         announceTimer.Start(1500, wxTIMER_ONE_SHOT);
@@ -478,28 +488,28 @@ void MainWindow::probeWinget(std::function<void(const wingetsetup::Version&)> th
         if (runner.lastLaunchFailed())
             then(wingetsetup::Version {});   // winget absent: not found
         else
-            announce(kBusyMsg);
+            announce(busyMsg());
     }
 }
 
 void MainWindow::ensureWinget(std::function<void()> then)
 {
-    log(L"Vérification de winget…");
+    log(loc::tr("Checking winget…", "Vérification de winget…"));
     probeWinget([this, then](const wingetsetup::Version& v)
     {
         if (v.recentEnough())
         {
             wingetReady = true;
-            log(wxString::Format(L"winget %s prêt.", v.text));
+            log(wxString::Format(loc::tr("winget %s ready.", "winget %s prêt."), v.text));
             then();
             return;
         }
         if (v.found)
-            log(wxString::Format(L"winget %s est trop ancien (minimum %d.%d), mise à jour…",
+            log(wxString::Format(loc::tr("winget %s is too old (minimum %d.%d), updating…", "winget %s est trop ancien (minimum %d.%d), mise à jour…"),
                                  v.text, wingetsetup::kMinMajor, wingetsetup::kMinMinor));
         else
-            log(L"winget est introuvable ou inactif sur cette machine, préparation…");
-        announce(L"Préparation de winget…");
+            log(loc::tr("winget is missing or inactive on this machine, preparing…", "winget est introuvable ou inactif sur cette machine, préparation…"));
+        announce(loc::tr("Preparing winget…", "Préparation de winget…"));
         runRepairStep(0, then);
     });
 }
@@ -508,11 +518,11 @@ void MainWindow::runRepairStep(size_t step, std::function<void()> then)
 {
     struct Step { const wchar_t* label; wxString (*script)(); };
     static const Step steps[] = {
-        { L"Enregistrement du Programme d'installation d'application…",
+        { loc::tr("Registering App Installer…", "Enregistrement du Programme d'installation d'application…"),
           &wingetsetup::scriptRegisterAppInstaller },
-        { L"Réparation de winget par l'outil de Microsoft (module WinGet)…",
+        { loc::tr("Repairing winget with Microsoft's tool (WinGet module)…", "Réparation de winget par l'outil de Microsoft (module WinGet)…"),
           &wingetsetup::scriptRepairWithModule },
-        { L"Téléchargement du paquet officiel de winget (environ 220 Mo)…",
+        { loc::tr("Downloading the official winget package (about 220 MB)…", "Téléchargement du paquet officiel de winget (environ 220 Mo)…"),
           &wingetsetup::scriptInstallOfficialBundle },
     };
     const size_t stepCount = sizeof(steps) / sizeof(steps[0]);
@@ -527,22 +537,29 @@ void MainWindow::runRepairStep(size_t step, std::function<void()> then)
             if (v.found)
             {
                 wingetReady = true;
-                log(wxString::Format(L"winget %s n'a pas pu être mis à jour ; certaines fonctions "
-                                     L"peuvent échouer.", v.text));
-                announce(L"winget ancien, mise à jour impossible");
+                log(wxString::Format(loc::tr("winget %s could not be updated; some features "
+                                             "may fail.",
+                                             "winget %s n'a pas pu être mis à jour ; certaines "
+                                             "fonctions peuvent échouer."), v.text));
+                announce(loc::tr("Old winget, update impossible", "winget ancien, mise à jour impossible"));
                 then();
                 return;
             }
             wingetReady = false;
-            log(L"winget n'a pas pu être installé automatiquement.");
-            announce(L"winget introuvable");
+            log(loc::tr("winget could not be installed automatically.", "winget n'a pas pu être installé automatiquement."));
+            announce(loc::tr("winget not found", "winget introuvable"));
             wxMessageBox(
-                L"WingetAccess n'a pas pu préparer winget sur cette machine.\n\n"
-                L"Vérifie la connexion Internet, puis appuie sur F5 pour réessayer.\n"
-                L"Tu peux aussi installer « Programme d'installation d'application » "
-                L"depuis le Microsoft Store, puis appuyer sur F5.\n\n"
-                L"Le détail des erreurs est dans le journal.",
-                L"winget introuvable", wxOK | wxICON_WARNING, this);
+                loc::tr("WingetAccess could not prepare winget on this computer.\n\n"
+                        "Check the Internet connection, then press F5 to try again.\n"
+                        "You can also install \"App Installer\" from the Microsoft Store, "
+                        "then press F5.\n\n"
+                        "The details of the errors are in the log.",
+                        "WingetAccess n'a pas pu préparer winget sur cet ordinateur.\n\n"
+                        "Vérifiez la connexion Internet, puis appuyez sur F5 pour réessayer.\n"
+                        "Vous pouvez aussi installer « Programme d'installation d'application » "
+                        "depuis le Microsoft Store, puis appuyer sur F5.\n\n"
+                        "Le détail des erreurs est dans le journal."),
+                loc::tr("winget not found", "winget introuvable"), wxOK | wxICON_WARNING, this);
         });
         return;
     }
@@ -570,15 +587,15 @@ void MainWindow::runRepairStep(size_t step, std::function<void()> then)
                     }
                     maintenance = false;
                     wingetReady = true;
-                    log(wxString::Format(L"winget %s prêt.", v.text));
-                    announce(L"winget prêt");
+                    log(wxString::Format(loc::tr("winget %s ready.", "winget %s prêt."), v.text));
+                    announce(loc::tr("winget ready", "winget prêt"));
                     then();
                 });
             });
         });
     if (!started)
     {
-        log(L"Impossible de lancer PowerShell.");
+        log(loc::tr("Could not start PowerShell.", "Impossible de lancer PowerShell."));
         runRepairStep(step + 1, then);
     }
 }
@@ -599,7 +616,7 @@ void MainWindow::updateAppInstaller(std::function<void(bool ok)> then)
     maintenance = true;
     probeWinget([this, then](const wingetsetup::Version& before)
     {
-        const wxString start = L"Mise à jour de winget (Programme d'installation d'application)…";
+        const wxString start = loc::tr("Updating winget (App Installer)…", "Mise à jour de winget (Programme d'installation d'application)…");
         log(start);
         announce(start);
 
@@ -615,13 +632,13 @@ void MainWindow::updateAppInstaller(std::function<void(bool ok)> then)
                                  && (exitCode == 0 || after.text != before.text);
                     if (ok)
                     {
-                        log(wxString::Format(L"winget mis à jour : %s.", after.text));
-                        announce(wxString::Format(L"winget mis à jour, version %s", after.text));
+                        log(wxString::Format(loc::tr("winget updated: %s.", "winget mis à jour : %s."), after.text));
+                        announce(wxString::Format(loc::tr("winget updated, version %s", "winget mis à jour, version %s"), after.text));
                     }
                     else
                     {
-                        log(L"Échec de la mise à jour de winget.");
-                        announce(L"Échec de la mise à jour de winget");
+                        log(loc::tr("winget update failed.", "Échec de la mise à jour de winget."));
+                        announce(loc::tr("winget update failed", "Échec de la mise à jour de winget"));
                     }
                     then(ok);
                 });
@@ -642,7 +659,7 @@ void MainWindow::updateAppInstaller(std::function<void(bool ok)> then)
                 }
                 // The new version may need dependencies the direct install
                 // skipped: Microsoft's repair tool installs them.
-                log(L"Installation directe impossible, réparation par l'outil de Microsoft…");
+                log(loc::tr("Direct install failed, repairing with Microsoft's tool…", "Installation directe impossible, réparation par l'outil de Microsoft…"));
                 const bool again = runner.startProgram(
                     wingetsetup::powershellPath(),
                     wingetsetup::powershellArgs(wingetsetup::scriptRepairWithModule()),
@@ -653,7 +670,7 @@ void MainWindow::updateAppInstaller(std::function<void(bool ok)> then)
             });
         if (!started)
         {
-            log(L"Impossible de lancer PowerShell.");
+            log(loc::tr("Could not start PowerShell.", "Impossible de lancer PowerShell."));
             maintenance = false;
             then(false);
         }
@@ -663,7 +680,7 @@ void MainWindow::updateAppInstaller(std::function<void(bool ok)> then)
 void MainWindow::startRefreshChain(bool withAppInstallerCheck)
 {
     autoUpdateAppInstaller = withAppInstallerCheck && !appInstallerAutoTried;
-    log(L"Chargement des paquets installés…");
+    log(loc::tr("Loading installed packages…", "Chargement des paquets installés…"));
     refreshUpgradesAfterInstalled = true;
     refreshInstalled();
 }
@@ -673,11 +690,11 @@ void MainWindow::reportStartFailure()
     if (runner.lastLaunchFailed())
     {
         wingetReady = false;
-        log(L"winget est introuvable.");
+        log(loc::tr("winget not found.", "winget est introuvable."));
         ensureWinget([this]() { startRefreshChain(true); });
     }
     else
-        announce(kBusyMsg);
+        announce(busyMsg());
 }
 
 // --- self-update -------------------------------------------------------------
@@ -692,13 +709,13 @@ void MainWindow::checkSelfUpdate(bool manual)
     if (selfUpdating || selfUpdatePending)
     {
         if (manual)
-            announce(L"Mise à jour de WingetAccess déjà en cours");
+            announce(loc::tr("WingetAccess update already in progress", "Mise à jour de WingetAccess déjà en cours"));
         return;
     }
     if (manual)
     {
-        log(L"Recherche d'une mise à jour de WingetAccess…");
-        announce(L"Recherche d'une mise à jour…");
+        log(loc::tr("Checking for a WingetAccess update…", "Recherche d'une mise à jour de WingetAccess…"));
+        announce(loc::tr("Checking for an update…", "Recherche d'une mise à jour…"));
     }
     wxWeakRef<MainWindow> self(this);
     std::thread([self, manual]()
@@ -717,17 +734,17 @@ void MainWindow::onSelfUpdateInfo(const selfupdate::Release& r, bool manual)
 {
     if (!r.ok)
     {
-        log(wxString::Format(L"Vérification de la mise à jour de WingetAccess impossible : %s.",
+        log(wxString::Format(loc::tr("Could not check for a WingetAccess update: %s.", "Vérification de la mise à jour de WingetAccess impossible : %s."),
                              r.error));
         if (manual)
-            announce(L"Vérification impossible, voir le journal");
+            announce(loc::tr("Check failed, see the log", "Vérification impossible, voir le journal"));
         return;
     }
     if (!selfupdate::isNewer(r))
     {
         if (manual)
         {
-            const wxString msg = wxString::Format(L"WingetAccess est à jour, version %s",
+            const wxString msg = wxString::Format(loc::tr("WingetAccess is up to date, version %s", "WingetAccess est à jour, version %s"),
                                                   WINGETACCESS_VERSION_STR);
             log(msg + ".");
             announce(msg);
@@ -735,14 +752,14 @@ void MainWindow::onSelfUpdateInfo(const selfupdate::Release& r, bool manual)
         return;
     }
 
-    log(wxString::Format(L"Nouvelle version de WingetAccess disponible : %s.", r.tag));
+    log(wxString::Format(loc::tr("New WingetAccess version available: %s.", "Nouvelle version de WingetAccess disponible : %s."), r.tag));
     pendingRelease = r;
     selfUpdatePending = true;
     if (wingetIdle())
         applySelfUpdate();
     else
     {
-        log(L"Elle sera installée dès la fin de l'opération en cours.");
+        log(loc::tr("It will be installed once the current operation ends.", "Elle sera installée dès la fin de l'opération en cours."));
         selfUpdateTimer.Start(2000);
     }
 }
@@ -751,7 +768,7 @@ void MainWindow::applySelfUpdate()
 {
     selfUpdatePending = false;
     selfUpdating = true;
-    const wxString msg = wxString::Format(L"Mise à jour de WingetAccess vers la version %s…",
+    const wxString msg = wxString::Format(loc::tr("Updating WingetAccess to version %s…", "Mise à jour de WingetAccess vers la version %s…"),
                                           pendingRelease.tag);
     log(msg);
     announce(msg);
@@ -770,9 +787,9 @@ void MainWindow::applySelfUpdate()
                 if (file.empty())
                 {
                     self->selfUpdating = false;
-                    self->log(wxString::Format(L"Échec de la mise à jour de WingetAccess : %s.",
+                    self->log(wxString::Format(loc::tr("WingetAccess update failed: %s.", "Échec de la mise à jour de WingetAccess : %s."),
                                                error));
-                    self->announce(L"Échec de la mise à jour de WingetAccess");
+                    self->announce(loc::tr("WingetAccess update failed", "Échec de la mise à jour de WingetAccess"));
                     return;
                 }
                 self->readyFile = file;
@@ -794,11 +811,11 @@ void MainWindow::swapAndRestart()
     {
         selfUpdating = false;
         readyFile.clear();
-        log(wxString::Format(L"Échec de la mise à jour de WingetAccess : %s.", error));
-        announce(L"Échec de la mise à jour de WingetAccess");
+        log(wxString::Format(loc::tr("WingetAccess update failed: %s.", "Échec de la mise à jour de WingetAccess : %s."), error));
+        announce(loc::tr("WingetAccess update failed", "Échec de la mise à jour de WingetAccess"));
         return;
     }
-    log(L"Redémarrage de WingetAccess…");
+    log(loc::tr("Restarting WingetAccess…", "Redémarrage de WingetAccess…"));
     Close(true);
 }
 
@@ -842,9 +859,9 @@ void MainWindow::refreshInstalled()
 
             fillList(listInstalled, tableInstalled);
             if (exitCode != 0 && tableInstalled.empty())
-                log(wxString::Format(L"winget list a échoué (code %d).", exitCode));
+                log(wxString::Format(loc::tr("winget list failed (code %d).", "winget list a échoué (code %d)."), exitCode));
             else
-                log(wxString::Format(L"%zu paquets installés.", tableInstalled.rows.size()));
+                log(wxString::Format(loc::tr("%zu installed packages.", "%zu paquets installés."), tableInstalled.rows.size()));
 
             if (refreshUpgradesAfterInstalled)
             {
@@ -852,7 +869,7 @@ void MainWindow::refreshInstalled()
                 refreshUpgrades();
             }
             else
-                announce(wxString::Format(L"%zu paquets installés", tableInstalled.rows.size()));
+                announce(wxString::Format(loc::tr("%zu installed packages", "%zu paquets installés"), tableInstalled.rows.size()));
         });
     if (!started)
         reportStartFailure();
@@ -868,9 +885,9 @@ void MainWindow::refreshUpgrades()
             tableUpgrades = wingetparser::parseFirstTable(output);
             fillList(listUpgrades, tableUpgrades);
             if (exitCode != 0 && tableUpgrades.empty())
-                log(wxString::Format(L"winget upgrade a échoué (code %d).", exitCode));
+                log(wxString::Format(loc::tr("winget upgrade failed (code %d).", "winget upgrade a échoué (code %d)."), exitCode));
             else
-                log(wxString::Format(L"%zu mises à jour disponibles.", tableUpgrades.rows.size()));
+                log(wxString::Format(loc::tr("%zu updates available.", "%zu mises à jour disponibles."), tableUpgrades.rows.size()));
 
             // winget itself first: an outdated App Installer is updated on its
             // own at startup (once per session), then the lists are reloaded.
@@ -884,7 +901,7 @@ void MainWindow::refreshUpgrades()
                     return;
                 }
             }
-            announce(wxString::Format(L"%zu mises à jour", tableUpgrades.rows.size()));
+            announce(wxString::Format(loc::tr("%zu updates", "%zu mises à jour"), tableUpgrades.rows.size()));
         });
     if (!started)
         reportStartFailure();
@@ -895,7 +912,7 @@ void MainWindow::runSearch()
     wxString terms = searchBox->GetValue().Strip(wxString::both);
     if (terms.empty())
     {
-        announce("Termes de recherche vides");
+        announce(loc::tr("Empty search terms", "Termes de recherche vides"));
         return;
     }
 
@@ -908,21 +925,21 @@ void MainWindow::runSearch()
             fillList(listSearch, tableSearch);
             if (tableSearch.empty())
             {
-                log(exitCode == 0 ? wxString(L"Recherche : aucun résultat.")
-                                  : wxString::Format(L"Recherche : aucun résultat (code %d).", exitCode));
-                announce(L"Aucun résultat");
+                log(exitCode == 0 ? wxString(loc::tr("Search: no results.", "Recherche : aucun résultat."))
+                                  : wxString::Format(loc::tr("Search: no results (code %d).", "Recherche : aucun résultat (code %d)."), exitCode));
+                announce(loc::tr("No results", "Aucun résultat"));
             }
             else
             {
-                log(wxString::Format(L"Recherche : %zu résultats.", tableSearch.rows.size()));
-                announce(wxString::Format(L"%zu résultats", tableSearch.rows.size()));
+                log(wxString::Format(loc::tr("Search: %zu results.", "Recherche : %zu résultats."), tableSearch.rows.size()));
+                announce(wxString::Format(loc::tr("%zu results", "%zu résultats"), tableSearch.rows.size()));
                 listSearch->SetFocus();
             }
         });
     if (started)
     {
-        log(wxString::Format(L"Recherche de « %s »…", terms));
-        announce(L"Recherche…");
+        log(wxString::Format(loc::tr("Searching for \"%s\"…", "Recherche de « %s »…"), terms));
+        announce(loc::tr("Searching…", "Recherche…"));
     }
     else
         reportStartFailure();
@@ -957,28 +974,55 @@ void MainWindow::fetchDescription()
             descPendingPage = -1;
             descShownId[page] = id;
 
-            // `winget show` prints localized "Field : value" lines; keep the
-            // few that matter for a spoken summary.
+            // `winget show` prints "Field: value" lines in the Windows
+            // language; keep the few that matter for a spoken summary. The
+            // colon must follow the field name directly, or "Publisher" would
+            // also catch "Publisher Url" and "Publisher Support Url".
+            static const char* const keys[] = {
+                "Description", "Version", "Publisher", "Author", "Auteur",
+                "Homepage", "Page d’accueil", "Page d'accueil", "License", "Licence" };  // utf8-ok
             wxString text;
-            const wchar_t* keys[] = { L"Description", L"Auteur", L"Publisher",
-                                      L"Page d", L"Licence", L"Version" };
+            bool continuation = false;   // field with its value on the next lines
             wxStringTokenizer lines(output, "\n");
             while (lines.HasMoreTokens())
             {
                 wxString line = lines.GetNextToken();
-                line.Trim(true).Trim(false);
-                for (const wchar_t* key : keys)
+                line.Trim(true);
+                // A field with an empty value (Git's description) continues on
+                // the following indented lines.
+                if (continuation)
                 {
-                    if (line.StartsWith(key) && line.Contains(":"))
+                    if (!line.empty() && (line[0] == ' ' || line[0] == '\t'))
+                    {
+                        text += line.Strip(wxString::leading) + "\n";
+                        continue;
+                    }
+                    continuation = false;
+                }
+                line.Trim(false);
+                for (const char* key : keys)
+                {
+                    wxString rest;
+                    if (!line.StartsWith(wxString::FromUTF8(key), &rest))
+                        continue;
+                    // French winget puts a no-break space (U+00A0) before
+                    // most colons, a plain one elsewhere.
+                    size_t i = 0;
+                    while (i < rest.length()
+                           && (rest[i] == ' ' || rest[i] == '\t'
+                               || rest[i] == wxUniChar(0x00A0) || rest[i] == wxUniChar(0x202F)))
+                        ++i;
+                    if (i < rest.length() && rest[i] == ':')
                     {
                         text += line + "\n";
+                        continuation = rest.Mid(i + 1).Strip(wxString::both).empty();
                         break;
                     }
                 }
             }
             if (text.empty())
-                text = exitCode == 0 ? wxString(L"Aucune description disponible.")
-                                     : wxString::Format(L"Description indisponible (code %d).", exitCode);
+                text = exitCode == 0 ? wxString(loc::tr("No description available.", "Aucune description disponible."))
+                                     : wxString::Format(loc::tr("Description unavailable (code %d).", "Description indisponible (code %d)."), exitCode);
 
             descBox[page]->SetValue(text);
             // If the user already tabbed onto the field while it said
@@ -990,7 +1034,7 @@ void MainWindow::fetchDescription()
     {
         if (showRunner.lastLaunchFailed())
         {
-            descBox[page]->SetValue(L"Description indisponible : winget est introuvable.");
+            descBox[page]->SetValue(loc::tr("Description unavailable: winget not found.", "Description indisponible : winget est introuvable."));
             descPendingId.clear();
             descPendingPage = -1;
         }
@@ -1011,17 +1055,17 @@ void MainWindow::runAction(const std::vector<wxString>& args, const wxString& an
         {
             actionInProgress = false;
             if (exitCode == 0)
-                log(L"Terminé.");
+                log(loc::tr("Done.", "Terminé."));
             else
-                log(wxString::Format(L"Échec, code %d (0x%08X).", exitCode,
+                log(wxString::Format(loc::tr("Failed, code %d (0x%08X).", "Échec, code %d (0x%08X)."), exitCode,
                                      static_cast<unsigned int>(exitCode)));
             if (then)
             {
                 then(exitCode);
                 return;
             }
-            announce(exitCode == 0 ? wxString(L"Terminé")
-                                   : wxString::Format(L"Échec, code %d", exitCode));
+            announce(exitCode == 0 ? wxString(loc::tr("Done", "Terminé"))
+                                   : wxString::Format(loc::tr("Failed, code %d", "Échec, code %d"), exitCode));
             // Refresh both stateful lists after any action.
             startRefreshChain(false);
         });
@@ -1040,7 +1084,7 @@ void MainWindow::onRefresh()
 {
     if (runner.isBusy())
     {
-        announce(kBusyMsg);
+        announce(busyMsg());
         return;
     }
     if (!wingetReady)
@@ -1050,8 +1094,8 @@ void MainWindow::onRefresh()
     }
     switch (notebook->GetSelection())
     {
-        case 0: log(L"Actualisation des paquets installés…"); refreshInstalled(); break;
-        case 1: log(L"Actualisation des mises à jour…"); refreshUpgrades(); break;
+        case 0: log(loc::tr("Refreshing installed packages…", "Actualisation des paquets installés…")); refreshInstalled(); break;
+        case 1: log(loc::tr("Refreshing updates…", "Actualisation des mises à jour…")); refreshUpgrades(); break;
         case 2: runSearch(); break;
     }
 }
@@ -1062,12 +1106,12 @@ void MainWindow::onUpgradeSelected()
     const wxString id = selectedId(&name);
     if (id.empty())
     {
-        announce(L"Aucune sélection");
+        announce(loc::tr("No selection", "Aucune sélection"));
         return;
     }
     if (runner.isBusy())
     {
-        announce(kBusyMsg);
+        announce(busyMsg());
         return;
     }
     // App Installer is winget itself: never upgraded through winget.
@@ -1079,24 +1123,24 @@ void MainWindow::onUpgradeSelected()
     runAction({ "upgrade", "--id", id, "--exact", "--silent",
                 "--accept-source-agreements", "--accept-package-agreements",
                 "--disable-interactivity" },
-              wxString::Format(L"Mise à jour de %s…", name));
+              wxString::Format(loc::tr("Updating %s…", "Mise à jour de %s…"), name));
 }
 
 void MainWindow::onUpgradeAll()
 {
     if (runner.isBusy())
     {
-        announce(kBusyMsg);
+        announce(busyMsg());
         return;
     }
     if (tableUpgrades.empty())
     {
-        announce(L"Aucune mise à jour");
+        announce(loc::tr("No updates", "Aucune mise à jour"));
         return;
     }
     const int reply = wxMessageBox(
-        wxString::Format(L"Mettre à jour les %zu paquets ?", tableUpgrades.rows.size()),
-        L"Tout mettre à jour", wxYES_NO | wxICON_QUESTION, this);
+        wxString::Format(loc::tr("Update the %zu packages?", "Mettre à jour les %zu paquets ?"), tableUpgrades.rows.size()),
+        loc::tr("Update all", "Tout mettre à jour"), wxYES_NO | wxICON_QUESTION, this);
     if (reply != wxYES)
         return;
 
@@ -1138,8 +1182,8 @@ void MainWindow::runNextQueuedUpgrade()
     if (upgradeQueue.empty())
     {
         const wxString summary = upgradeFailed == 0
-            ? wxString::Format(L"Mises à jour terminées : %zu sur %zu.", upgradeDone, upgradeTotal)
-            : wxString::Format(L"Mises à jour terminées : %zu réussies, %zu échecs.",
+            ? wxString::Format(loc::tr("Updates finished: %zu of %zu.", "Mises à jour terminées : %zu sur %zu."), upgradeDone, upgradeTotal)
+            : wxString::Format(loc::tr("Updates finished: %zu succeeded, %zu failed.", "Mises à jour terminées : %zu réussies, %zu échecs."),
                                upgradeDone - upgradeFailed, upgradeFailed);
         log(summary);
         announce(summary);
@@ -1152,7 +1196,7 @@ void MainWindow::runNextQueuedUpgrade()
     runAction({ "upgrade", "--id", next.id, "--exact", "--silent",
                 "--accept-source-agreements", "--accept-package-agreements",
                 "--disable-interactivity" },
-              wxString::Format(L"Mise à jour %zu sur %zu : %s…",
+              wxString::Format(loc::tr("Update %zu of %zu: %s…", "Mise à jour %zu sur %zu : %s…"),
                                upgradeDone + 1, upgradeTotal, next.name),
               [this, name = next.name](int exitCode)
               {
@@ -1160,7 +1204,7 @@ void MainWindow::runNextQueuedUpgrade()
                   if (exitCode != 0)
                   {
                       ++upgradeFailed;
-                      announce(wxString::Format(L"Échec : %s", name));
+                      announce(wxString::Format(loc::tr("Failed: %s", "Échec : %s"), name));
                   }
                   runNextQueuedUpgrade();
               });
@@ -1172,39 +1216,41 @@ void MainWindow::onInstallSelected()
     const wxString id = selectedId(&name);
     if (id.empty())
     {
-        announce(L"Aucune sélection");
+        announce(loc::tr("No selection", "Aucune sélection"));
         return;
     }
     runAction({ "install", "--id", id, "--exact", "--silent",
                 "--accept-source-agreements", "--accept-package-agreements",
                 "--disable-interactivity" },
-              wxString::Format(L"Installation de %s…", name));
+              wxString::Format(loc::tr("Installing %s…", "Installation de %s…"), name));
 }
 
 void MainWindow::onUninstallSelected()
 {
     if (notebook->GetSelection() == 2)
     {
-        announce(L"Désinstallation impossible depuis la recherche");
+        announce(loc::tr("Cannot uninstall from the search", "Désinstallation impossible depuis la recherche"));
         return;
     }
     wxString name, version;
     const wxString id = selectedId(&name, &version);
     if (id.empty())
     {
-        announce(L"Aucune sélection");
+        announce(loc::tr("No selection", "Aucune sélection"));
         return;
     }
     if (wingetsetup::isAppInstallerId(id))
     {
-        log(L"Le Programme d'installation d'application contient winget : le désinstaller "
-            L"rendrait WingetAccess inutilisable. Désinstallation refusée.");
-        announce(L"Désinstallation de winget refusée");
+        log(loc::tr("App Installer contains winget: uninstalling it would make WingetAccess "
+                    "unusable. Uninstall refused.",
+                    "Le Programme d'installation d'application contient winget : le désinstaller "
+                    "rendrait WingetAccess inutilisable. Désinstallation refusée."));
+        announce(loc::tr("Uninstalling winget refused", "Désinstallation de winget refusée"));
         return;
     }
     const int reply = wxMessageBox(
-        wxString::Format(L"Désinstaller %s ?", name),
-        L"Désinstaller", wxYES_NO | wxICON_QUESTION, this);
+        wxString::Format(loc::tr("Uninstall %s?", "Désinstaller %s ?"), name),
+        loc::tr("Uninstall", "Désinstaller"), wxYES_NO | wxICON_QUESTION, this);
     if (reply != wxYES)
         return;
 
@@ -1220,7 +1266,7 @@ void MainWindow::onUninstallSelected()
         args.push_back("--version");
         args.push_back(version);
     }
-    runAction(args, wxString::Format(L"Désinstallation de %s %s…", name, version));
+    runAction(args, wxString::Format(loc::tr("Uninstalling %s %s…", "Désinstallation de %s %s…"), name, version));
 }
 
 void MainWindow::onCopyId()
@@ -1228,14 +1274,14 @@ void MainWindow::onCopyId()
     const wxString id = selectedId();
     if (id.empty())
     {
-        announce(L"Aucune sélection");
+        announce(loc::tr("No selection", "Aucune sélection"));
         return;
     }
     if (wxTheClipboard->Open())
     {
         wxTheClipboard->SetData(new wxTextDataObject(id));
         wxTheClipboard->Close();
-        announce(L"Identifiant copié");
+        announce(loc::tr("ID copied", "Identifiant copié"));
     }
 }
 
@@ -1279,32 +1325,56 @@ void MainWindow::onItemActivated(wxListEvent& e)
 void MainWindow::onHelpKeys()
 {
     wxMessageBox(
-        L"Ctrl+1 : Installés\n"
-        L"Ctrl+2 : Mises à jour\n"
-        "Ctrl+3 : Recherche (le focus va au champ)\n"
-        L"Entrée dans une liste : mettre à jour (Installés, Mises à jour) ou installer (Recherche)\n"
-        L"Ctrl+U : mettre à jour la sélection\n"
-        L"Ctrl+Maj+U : tout mettre à jour\n"
-        L"Ctrl+I : installer la sélection\n"
-        L"Suppr : désinstaller la sélection (avec confirmation)\n"
-        "Ctrl+Maj+C : copier l'identifiant du paquet\n"
-        L"F5 : actualiser l'onglet courant (ou relancer la préparation de winget)\n"
-        L"Le journal en bas de la fenêtre garde la sortie complète de winget.\n"
-        L"Au démarrage, WingetAccess prépare winget tout seul : il l'installe ou le répare "
-        L"s'il manque, accepte les conditions des sources et le met à jour en premier "
-        L"quand une nouvelle version existe.\n"
-        L"WingetAccess se met aussi à jour tout seul depuis GitHub, au démarrage, dès "
-        L"qu'aucune opération n'est en cours (menu Aide : Rechercher une mise à jour "
-        L"de WingetAccess).",
-        "Raccourcis clavier", wxOK | wxICON_INFORMATION, this);
+        loc::tr("Ctrl+1: Installed\n"
+                "Ctrl+2: Updates\n"
+                "Ctrl+3: Search (the focus goes to the field)\n"
+                "Enter in a list: update (Installed, Updates) or install (Search)\n"
+                "Tab from a list: description of the selected package\n"
+                "Ctrl+U: update the selection\n"
+                "Ctrl+Shift+U: update all\n"
+                "Ctrl+I: install the selection\n"
+                "Delete: uninstall the selection (with confirmation)\n"
+                "Ctrl+Shift+C: copy the package ID\n"
+                "F5: refresh the current tab (or prepare winget again)\n"
+                "The log at the bottom of the window keeps winget's full output.\n"
+                "At startup, WingetAccess prepares winget on its own: it installs or repairs "
+                "it when missing, accepts the source agreements and updates it first when a "
+                "new version exists.\n"
+                "WingetAccess also updates itself from GitHub, at startup, as soon as no "
+                "operation is running (Help menu: Check for a WingetAccess update).",
+                "Ctrl+1 : Installés\n"
+                "Ctrl+2 : Mises à jour\n"
+                "Ctrl+3 : Recherche (le focus va au champ)\n"
+                "Entrée dans une liste : mettre à jour (Installés, Mises à jour) ou installer "
+                "(Recherche)\n"
+                "Tab depuis une liste : description du paquet sélectionné\n"
+                "Ctrl+U : mettre à jour la sélection\n"
+                "Ctrl+Maj+U : tout mettre à jour\n"
+                "Ctrl+I : installer la sélection\n"
+                "Suppr : désinstaller la sélection (avec confirmation)\n"
+                "Ctrl+Maj+C : copier l'identifiant du paquet\n"
+                "F5 : actualiser l'onglet courant (ou relancer la préparation de winget)\n"
+                "Le journal en bas de la fenêtre garde la sortie complète de winget.\n"
+                "Au démarrage, WingetAccess prépare winget tout seul : il l'installe ou le "
+                "répare s'il manque, accepte les conditions des sources et le met à jour en "
+                "premier quand une nouvelle version existe.\n"
+                "WingetAccess se met aussi à jour tout seul depuis GitHub, au démarrage, dès "
+                "qu'aucune opération n'est en cours (menu Aide : Rechercher une mise à jour "
+                "de WingetAccess)."),
+        loc::tr("Keyboard shortcuts", "Raccourcis clavier"), wxOK | wxICON_INFORMATION, this);
 }
 
 void MainWindow::onAbout()
 {
     wxMessageBox(
-        wxString::Format("WingetAccess %s\n"
-                         "Gestionnaire Winget accessible (NVDA), portable.\n"
-                         "Interface wxWidgets, annonces UI Automation natives.",
+        wxString::Format(loc::tr("WingetAccess %s\n"
+                                 "Accessible, portable Winget manager for screen readers "
+                                 "(NVDA, JAWS, Narrator).\n"
+                                 "By ReaperAccessible.",
+                                 "WingetAccess %s\n"
+                                 "Gestionnaire Winget accessible et portable pour lecteurs "
+                                 "d'écran (NVDA, JAWS, Narrateur).\n"
+                                 "Par ReaperAccessible."),
                          WINGETACCESS_VERSION_STR),
-        L"À propos", wxOK | wxICON_INFORMATION, this);
+        loc::tr("About", "À propos"), wxOK | wxICON_INFORMATION, this);
 }

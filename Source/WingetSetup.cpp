@@ -1,4 +1,5 @@
 #include "WingetSetup.h"
+#include "Localization.h"
 
 #include <wx/base64.h>
 #include <wx/utils.h>
@@ -24,11 +25,29 @@ try {
         + body
         + wxString(LR"PS(
 } catch {
-    Write-Output ('ERREUR : ' + $_.Exception.Message)
+    Write-Output ('@ERROR@' + $_.Exception.Message)
     exit 1
 }
 exit 0
 )PS");
+}
+
+// Inserts a translated message into a PowerShell single-quoted string.
+wxString psText(const char* en, const char* fr)
+{
+    wxString text = loc::tr(en, fr);
+    text.Replace("'", "''");
+    return text;
+}
+
+wxString finish(wxString script)
+{
+    script.Replace("@ERROR@", psText("ERROR: ", "ERREUR : "));
+    script.Replace("@DOWNLOAD_FAILED@", psText("winget download failed, code ",
+                                               "winget download a échoué, code "));
+    script.Replace("@NO_PACKAGE@", psText("package not found after the download",
+                                          "paquet introuvable après le téléchargement"));
+    return script;
 }
 
 bool isDigit(wxUniChar c)
@@ -99,14 +118,14 @@ std::vector<wxString> powershellArgs(const wxString& script)
 
 wxString scriptRegisterAppInstaller()
 {
-    return wrapScript(LR"PS(
+    return finish(wrapScript(LR"PS(
     Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe
-)PS");
+)PS"));
 }
 
 wxString scriptRepairWithModule()
 {
-    return wrapScript(LR"PS(
+    return finish(wrapScript(LR"PS(
     $nuget = Get-PackageProvider -ListAvailable -Name NuGet -ErrorAction SilentlyContinue |
              Where-Object { $_.Version -ge [version]'2.8.5.201' }
     if (-not $nuget) {
@@ -115,12 +134,12 @@ wxString scriptRepairWithModule()
     Install-Module -Name Microsoft.WinGet.Client -Repository PSGallery -Force -Scope CurrentUser -AllowClobber | Out-Null
     Import-Module Microsoft.WinGet.Client -Force
     Repair-WinGetPackageManager -Latest -Force | Out-Null
-)PS");
+)PS"));
 }
 
 wxString scriptInstallOfficialBundle()
 {
-    return wrapScript(LR"PS(
+    return finish(wrapScript(LR"PS(
     $dir = Join-Path $env:TEMP 'WingetAccess_AppInstaller'
     if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -131,7 +150,7 @@ wxString scriptInstallOfficialBundle()
     } finally {
         Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
     }
-)PS");
+)PS"));
 }
 
 wxString scriptUpdateAppInstaller(const wxString& wingetExe)
@@ -146,20 +165,20 @@ wxString scriptUpdateAppInstaller(const wxString& wingetExe)
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     try {
         & '@WINGET@' download --id Microsoft.AppInstaller --exact --source winget --skip-dependencies --download-directory $dir --accept-source-agreements --accept-package-agreements --disable-interactivity
-        if ($LASTEXITCODE -ne 0) { throw ('winget download a échoué, code ' + $LASTEXITCODE) }
+        if ($LASTEXITCODE -ne 0) { throw ('@DOWNLOAD_FAILED@' + $LASTEXITCODE) }
         # winget names the bundle after the localized package name, with a
         # .msix extension: pick the package file whatever its name.
         $pkg = Get-ChildItem -Path $dir -File |
                Where-Object { $_.Extension -in '.msix', '.msixbundle', '.appx', '.appxbundle' } |
                Select-Object -First 1
-        if (-not $pkg) { throw 'paquet introuvable après le téléchargement' }
+        if (-not $pkg) { throw '@NO_PACKAGE@' }
         Add-AppxPackage -Path $pkg.FullName -ForceApplicationShutdown
     } finally {
         Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
     }
 )PS";
     body.Replace("@WINGET@", exe);
-    return wrapScript(body);
+    return finish(wrapScript(body));
 }
 
 } // namespace wingetsetup

@@ -22,6 +22,7 @@ add_executable(WingetAccess WIN32
     Source/WingetParser.cpp
     Source/WingetSetup.cpp
     Source/SelfUpdate.cpp
+    Source/Localization.cpp
     Source/WingetAccess.rc     # manifest (asInvoker/DPI) + version info
 )
 
@@ -70,6 +71,7 @@ if(BUILD_PARSETEST)
     add_executable(setuptest
         tools/setuptest.cpp
         Source/WingetSetup.cpp
+        Source/Localization.cpp
     )
     target_include_directories(setuptest PRIVATE Source)
     target_link_libraries(setuptest PRIVATE ${wxWidgets_LIBRARIES})

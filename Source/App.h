@@ -14,5 +14,6 @@ public:
     bool OnCmdLineParsed(wxCmdLineParser& parser) override;
 
 private:
-    bool justUpdated = false;   // --updated: started by the previous version
+    bool     justUpdated = false;   // --updated: started by the previous version
+    wxString forcedLanguage;        // --lang=fr|en, else the Windows language
 };
