@@ -3,16 +3,22 @@
 
 wxIMPLEMENT_APP(App);
 
+void App::OnInitCmdLine(wxCmdLineParser& parser)
+{
+    wxApp::OnInitCmdLine(parser);
+    parser.AddLongSwitch("updated", "started by the previous version after a self-update");
+}
+
+bool App::OnCmdLineParsed(wxCmdLineParser& parser)
+{
+    justUpdated = parser.FoundSwitch("updated") == wxCMD_SWITCH_ON;
+    return wxApp::OnCmdLineParsed(parser);
+}
+
 bool App::OnInit()
 {
     if (!wxApp::OnInit())
         return false;
-
-    // --updated: started by the previous version right after a self-update.
-    bool justUpdated = false;
-    for (int i = 1; i < argc; ++i)
-        if (argv[i] == "--updated")
-            justUpdated = true;
 
     auto* window = new MainWindow(justUpdated);
     window->Show(true);
